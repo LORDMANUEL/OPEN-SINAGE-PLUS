@@ -1,7 +1,8 @@
 {
   "name": "player",
   "version": "1.0.0",
-  "description": "",
+  "description": "Digital Signage Player Application",
+  "homepage": "https://example.com",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -9,7 +10,10 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": {
+    "name": "Your Name",
+    "email": "your.email@example.com"
+  },
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
@@ -27,7 +31,10 @@
       "target": "nsis"
     },
     "linux": {
-      "target": "AppImage"
+      "target": [
+        "AppImage",
+        "deb"
+      ]
     }
   }
 }
