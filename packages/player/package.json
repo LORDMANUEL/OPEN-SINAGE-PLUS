@@ -1,0 +1,33 @@
+{
+  "name": "player",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.electron.digitalsignageplayer",
+    "productName": "DigitalSignagePlayer",
+    "files": [
+      "main.js",
+      "index.html"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

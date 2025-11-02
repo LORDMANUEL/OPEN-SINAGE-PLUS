@@ -1,12 +1,12 @@
 import React, { createContext, useState, useContext } from 'react';
 import {
   initialApiKeys,
-  initialScreens,
   initialMediaLibrary,
   initialBackups,
   initialTickets,
   users,
 } from '../data/mockData';
+import { useEffect } from 'react';
 
 const AppContext = createContext(null);
 
@@ -14,12 +14,26 @@ export const AppProvider = ({ children }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [apiKeys, setApiKeys] = useState(initialApiKeys);
-  const [screens, setScreens] = useState(initialScreens);
+  const [screens, setScreens] = useState({ signage: [], kiosk: [], dashboard: [] });
   const [mediaLibrary, setMediaLibrary] = useState(initialMediaLibrary);
   const [backups, setBackups] = useState(initialBackups);
   const [tickets, setTickets] = useState(initialTickets);
   const [notifications, setNotifications] = useState([]);
   const [selectedScreen, setSelectedScreen] = useState(null);
+
+  useEffect(() => {
+    const fetchScreens = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/screens');
+        const data = await response.json();
+        setScreens(data);
+      } catch (error) {
+        console.error('Error fetching screens:', error);
+      }
+    };
+
+    fetchScreens();
+  }, []);
 
   const createNewScreen = (type) => {
     const typeNames = {
