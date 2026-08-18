@@ -1,6 +1,6 @@
 import { useState, type ComponentType } from 'react';
 import { BarChart3, Home, LogOut, Menu, Monitor, PlugZap, Settings, Smartphone, X } from 'lucide-react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/app-context';
 
 type SidebarProps = {
   currentView: string;
