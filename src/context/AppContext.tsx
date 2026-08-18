@@ -1,52 +1,14 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { initialMediaLibrary, initialScreens, initialTickets, users } from '../data/mockData';
-
-export type ScreenType = 'signage' | 'kiosk' | 'dashboard';
-export type ScreenStatus = 'online' | 'offline';
-export type ScreenOrientation = 'horizontal' | 'vertical';
-
-export interface ScreenRecord {
-  id: number;
-  name: string;
-  zone: string;
-  status: ScreenStatus;
-  orientation: ScreenOrientation;
-  layout: string;
-  lastSync: string;
-  aiGenerated?: boolean;
-}
-
-export interface UserRecord {
-  email: string;
-  password: string;
-  role: 'admin_it' | 'marketeer';
-  name: string;
-  avatar: string;
-}
-
-export interface NotificationRecord {
-  id: number;
-  type: 'success' | 'error' | 'info';
-  message: string;
-  time: Date;
-}
-
-type ScreensState = Record<ScreenType, ScreenRecord[]>;
-
-type AppContextValue = {
-  isLoggedIn: boolean;
-  currentUser: UserRecord | null;
-  screens: ScreensState;
-  mediaLibrary: typeof initialMediaLibrary;
-  tickets: typeof initialTickets;
-  notifications: NotificationRecord[];
-  handleLogin: (email: string, password: string) => boolean;
-  handleLogout: () => void;
-  createNewScreen: (type: ScreenType) => void;
-  deleteScreen: (type: ScreenType, id: number) => void;
-};
-
-const AppContext = createContext<AppContextValue | undefined>(undefined);
+import {
+  AppContext,
+  type AppContextValue,
+  type NotificationRecord,
+  type ScreenRecord,
+  type ScreensState,
+  type ScreenType,
+  type UserRecord,
+} from './app-context';
 
 function normalizeInitialScreens(): ScreensState {
   return {
@@ -114,7 +76,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     notify('success', 'Pantalla local eliminada');
   };
 
-  const value = useMemo<AppContextValue>(() => ({
+  const value: AppContextValue = {
     isLoggedIn,
     currentUser,
     screens,
@@ -125,13 +87,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     handleLogout,
     createNewScreen,
     deleteScreen,
-  }), [isLoggedIn, currentUser, screens, notifications]);
+  };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-}
-
-export function useAppContext() {
-  const context = useContext(AppContext);
-  if (!context) throw new Error('useAppContext must be used inside AppProvider');
-  return context;
 }
