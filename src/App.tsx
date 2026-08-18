@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { AppProvider, useAppContext } from './context/AppContext';
+import { AppProvider } from './context/AppContext';
+import { useAppContext } from './context/app-context';
 import LoginScreen from './views/LoginScreen';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
