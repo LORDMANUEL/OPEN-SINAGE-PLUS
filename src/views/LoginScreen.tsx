@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { MonitorPlay, ShieldCheck, Sparkles } from 'lucide-react';
 import { useAppContext } from '../context/app-context';
 
 export default function LoginScreen() {
@@ -11,53 +12,28 @@ export default function LoginScreen() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-950 p-6">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <div className="mb-4 text-6xl">🖥️</div>
-          <h1 className="text-4xl font-bold text-white">Open Signage Plus</h1>
-          <p className="mt-2 text-cyan-200">Xibo + PWA + automatización + IA</p>
+    <div className="login-page">
+      <section className="login-hero">
+        <div className="brand-mark"><MonitorPlay size={31} /></div>
+        <span className="eyebrow eyebrow--light">OPEN SIGNAGE PLUS</span>
+        <h1>Señalización digital simple por fuera. Potente por dentro.</h1>
+        <p>Xibo como motor, nuestra PWA como experiencia, y una capa preparada para IA, QR, tickets, HTML y pantallas táctiles.</p>
+        <div className="login-features">
+          <span><ShieldCheck size={18} /> Credenciales Xibo solo en servidor</span>
+          <span><Sparkles size={18} /> IA local o por API</span>
+          <span><MonitorPlay size={18} /> Navegador primero</span>
         </div>
+      </section>
 
-        <form onSubmit={onLogin} className="space-y-6 rounded-3xl border border-white/20 bg-white/10 p-8 shadow-2xl backdrop-blur-xl">
-          <div>
-            <label htmlFor="email" className="mb-2 block font-semibold text-white">Email</label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="username"
-              value={loginForm.email}
-              onChange={event => setLoginForm(current => ({ ...current, email: event.target.value }))}
-              className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white outline-none placeholder:text-white/50 focus:border-cyan-300"
-              placeholder="usuario@empresa.com"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="password" className="mb-2 block font-semibold text-white">Contraseña</label>
-            <input
-              id="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={loginForm.password}
-              onChange={event => setLoginForm(current => ({ ...current, password: event.target.value }))}
-              className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-white outline-none placeholder:text-white/50 focus:border-cyan-300"
-              placeholder="••••••••"
-            />
-          </div>
-
-          <button type="submit" className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 py-4 text-lg font-bold text-white shadow-lg transition hover:scale-[1.02]">
-            Iniciar sesión
-          </button>
-
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-xs text-white/70">
-            <p>Demo administrador: admin@empresa.com / admin123</p>
-            <p className="mt-1">Demo marketing: marketing@empresa.com / marketing123</p>
-          </div>
+      <section className="login-card-wrap">
+        <form onSubmit={onLogin} className="login-card">
+          <div><span className="eyebrow">ACCESO</span><h2>Bienvenido</h2><p>Administra contenido y pantallas desde un solo lugar.</p></div>
+          <label>Email<input id="email" type="email" required autoComplete="username" value={loginForm.email} onChange={event => setLoginForm(current => ({ ...current, email: event.target.value }))} placeholder="usuario@empresa.com" /></label>
+          <label>Contraseña<input id="password" type="password" required autoComplete="current-password" value={loginForm.password} onChange={event => setLoginForm(current => ({ ...current, password: event.target.value }))} placeholder="••••••••" /></label>
+          <button type="submit" className="button button--primary button--wide">Iniciar sesión</button>
+          <div className="demo-box"><strong>Acceso de demostración</strong><span>admin@empresa.com · admin123</span><span>marketing@empresa.com · marketing123</span></div>
         </form>
-      </div>
+      </section>
     </div>
   );
 }
