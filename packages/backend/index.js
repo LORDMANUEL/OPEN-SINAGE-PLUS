@@ -1,70 +1,23 @@
-const express = require('express');
-const cors = require('cors');
+const { createApp } = require('./src/app');
+const { XiboClient } = require('./src/xibo-client');
 
-const app = express();
-const port = 3000;
+const port = Number(process.env.PORT || 3000);
 
-app.use(cors());
-app.use(express.json());
+function buildXiboClientFromEnv() {
+  return new XiboClient({
+    baseUrl: process.env.XIBO_BASE_URL,
+    clientId: process.env.XIBO_CLIENT_ID,
+    clientSecret: process.env.XIBO_CLIENT_SECRET,
+    timeoutMs: Number(process.env.XIBO_TIMEOUT_MS || 10000),
+  });
+}
 
-const screens = {
-  signage: [
-    {
-      id: 1,
-      name: 'Lobby Principal (Modificado)',
-      zone: 'Recepción',
-      status: 'online',
-      orientation: 'horizontal',
-      layout: 'corporate',
-      lastSync: '2025-10-15 14:30'
-    },
-    {
-      id: 2,
-      name: 'Sala Espera',
-      zone: 'Piso 2',
-      status: 'online',
-      orientation: 'horizontal',
-      layout: 'media-wall',
-      lastSync: '2025-10-15 14:28'
-    }
-  ],
-  kiosk: [
-    {
-      id: 3,
-      name: 'Kiosko Comida',
-      zone: 'Restaurant',
-      status: 'online',
-      orientation: 'vertical',
-      layout: 'menu-vertical',
-      lastSync: '2025-10-15 14:32'
-    },
-    {
-      id: 4,
-      name: 'Auto-Checkout',
-      zone: 'Tienda',
-      status: 'offline',
-      orientation: 'vertical',
-      layout: 'checkout',
-      lastSync: '2025-10-15 12:15'
-    }
-  ],
-  dashboard: [
-    {
-      id: 5,
-      name: 'Dashboard CEO',
-      zone: 'Oficina',
-      status: 'online',
-      orientation: 'horizontal',
-      layout: 'analytics',
-      lastSync: '2025-10-15 14:33'
-    }
-  ]
-};
-
-app.get('/api/screens', (req, res) => {
-  res.json(screens);
-});
-
-app.listen(port, () => {
-  console.log(`Mock API server listening at http://localhost:${port}`);
-});
+try {
+  const app = createApp({ xiboClient: buildXiboClientFromEnv() });
+  app.listen(port, () => {
+    console.log(`Open Signage API listening on http://localhost:${port}`);
+  });
+} catch (error) {
+  console.error(`Open Signage API configuration error: ${error.message}`);
+  process.exitCode = 1;
+}
