@@ -1,0 +1,105 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const { XiboClient, normalizeBaseUrl } = require('../src/xibo-client');
+
+test('normalizeBaseUrl removes trailing slashes and requires http(s)', () => {
+  assert.equal(normalizeBaseUrl('https://signage.example.com///'), 'https://signage.example.com');
+  assert.throws(() => normalizeBaseUrl('ftp://example.com'), /http/i);
+  assert.throws(() => normalizeBaseUrl(''), /required/i);
+});
+
+test('authenticate uses client_credentials and caches the access token', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ access_token: 'token-123', expires_in: 3600 }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  const client = new XiboClient({
+    baseUrl: 'https://signage.example.com/',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+    fetchImpl,
+  });
+
+  assert.equal(await client.authenticate(), 'token-123');
+  assert.equal(await client.authenticate(), 'token-123');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://signage.example.com/api/authorize/access_token');
+  assert.equal(calls[0].options.method, 'POST');
+
+  const body = new URLSearchParams(calls[0].options.body);
+  assert.equal(body.get('grant_type'), 'client_credentials');
+  assert.equal(body.get('client_id'), 'client-id');
+  assert.equal(body.get('client_secret'), 'client-secret');
+});
+
+test('getDisplays sends a Bearer token to Xibo display endpoint', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/api/authorize/access_token')) {
+      return new Response(JSON.stringify({ access_token: 'abc', expires_in: 3600 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify([{ displayId: 7, display: 'Lobby' }]), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  const client = new XiboClient({
+    baseUrl: 'https://signage.example.com',
+    clientId: 'id',
+    clientSecret: 'secret',
+    fetchImpl,
+  });
+
+  const displays = await client.getDisplays();
+  assert.equal(displays[0].displayId, 7);
+  assert.equal(calls[1].url, 'https://signage.example.com/api/display');
+  assert.equal(calls[1].options.headers.Authorization, 'Bearer abc');
+});
+
+test('createSchedule posts URL encoded data to the Xibo schedule endpoint', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/api/authorize/access_token')) {
+      return new Response(JSON.stringify({ access_token: 'abc', expires_in: 3600 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ eventId: 42 }), {
+      status: 201,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  const client = new XiboClient({
+    baseUrl: 'https://signage.example.com',
+    clientId: 'id',
+    clientSecret: 'secret',
+    fetchImpl,
+  });
+
+  const result = await client.createSchedule({ eventTypeId: 1, displayGroupIds: '5', layoutId: 9 });
+  assert.equal(result.eventId, 42);
+  assert.equal(calls[1].url, 'https://signage.example.com/api/schedule');
+  assert.equal(calls[1].options.method, 'POST');
+  assert.match(calls[1].options.headers['Content-Type'], /application\/x-www-form-urlencoded/);
+  const body = new URLSearchParams(calls[1].options.body);
+  assert.equal(body.get('layoutId'), '9');
+});
+
+test('constructor rejects incomplete Xibo credentials', () => {
+  assert.throws(() => new XiboClient({ baseUrl: 'https://example.com', clientId: '', clientSecret: 'x' }), /clientId/i);
+  assert.throws(() => new XiboClient({ baseUrl: 'https://example.com', clientId: 'x', clientSecret: '' }), /clientSecret/i);
+});
