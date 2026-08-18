@@ -1,5 +1,5 @@
 import { MapPin, Maximize2, Minimize2, Plus, Trash2 } from 'lucide-react';
-import { useAppContext, type ScreenType } from '../context/AppContext';
+import { useAppContext, type ScreenType } from '../context/app-context';
 
 type ScreenListViewProps = {
   type: ScreenType;
