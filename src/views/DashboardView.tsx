@@ -1,177 +1,61 @@
-import React from 'react';
-import { Monitor, CheckCircle, Package, AlertCircle, Wand2, Upload, Save, ChevronRight, BarChart3, Smartphone, Activity } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Monitor, Package } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 
-const DashboardView = () => {
-  const { screens, mediaLibrary, tickets, createBackup, hasPermission, setCurrentView } = useAppContext();
+export default function DashboardView() {
+  const { screens, mediaLibrary, tickets } = useAppContext();
+  const allScreens = [...screens.signage, ...screens.kiosk, ...screens.dashboard];
+  const onlineScreens = allScreens.filter(screen => screen.status === 'online').length;
+  const pendingTickets = tickets.filter(ticket => ticket.status === 'pending').length;
 
-  const totalScreens = screens.signage.length + screens.kiosk.length + screens.dashboard.length;
-  const onlineScreens = [...screens.signage, ...screens.kiosk, ...screens.dashboard]
-    .filter(s => s.status === 'online').length;
+  const stats = [
+    { label: 'Pantallas locales', value: allScreens.length, icon: Monitor, detail: 'Inventario visual actual' },
+    { label: 'Online', value: onlineScreens, icon: CheckCircle2, detail: 'Estado local/demo' },
+    { label: 'Media', value: mediaLibrary.length, icon: Package, detail: 'Assets disponibles' },
+    { label: 'Tickets', value: pendingTickets, icon: AlertCircle, detail: 'Pendientes de atención' },
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="grid md:grid-cols-4 gap-6">
-        {[
-          {
-            label: 'Total Pantallas',
-            value: totalScreens,
-            icon: Monitor,
-            color: 'from-blue-500 to-cyan-500',
-            change: '+2',
-            subtitle: 'Activas en sistema'
-          },
-          {
-            label: 'Pantallas Online',
-            value: onlineScreens,
-            icon: CheckCircle,
-            color: 'from-green-500 to-emerald-500',
-            change: `${Math.round((onlineScreens/totalScreens)*100)}%`,
-            subtitle: 'Uptime excelente'
-          },
-          {
-            label: 'Media Assets',
-            value: mediaLibrary.length,
-            icon: Package,
-            color: 'from-purple-500 to-pink-500',
-            change: '+5',
-            subtitle: 'Archivos disponibles'
-          },
-          {
-            label: 'Tickets Activos',
-            value: tickets.filter(t => t.status === 'pending').length,
-            icon: AlertCircle,
-            color: 'from-orange-500 to-red-500',
-            change: tickets.length > 0 ? 'Atención' : 'OK',
-            subtitle: 'Requieren acción'
-          }
-        ].map((stat, idx) => (
-          <div key={idx} className="p-6 rounded-2xl bg-white shadow-lg border border-slate-200 hover:shadow-xl transition-all group">
-            <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-xl bg-gradient-to-br ${stat.color} group-hover:scale-110 transition-all`}>
-                <stat.icon className="text-white" size={24} />
+    <section className="space-y-6">
+      <div className="rounded-3xl bg-gradient-to-r from-slate-950 via-blue-950 to-cyan-900 p-8 text-white shadow-xl">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Open Signage Plus V2</p>
+        <h2 className="mt-2 text-3xl font-bold">Xibo como motor. Nuestra experiencia encima.</h2>
+        <p className="mt-3 max-w-3xl text-slate-200">
+          Esta rama reemplaza el backend mock por un gateway OAuth2 real hacia Xibo y añade la base PWA. Usa “Motor Xibo” para verificar la instalación y los displays reales.
+        </p>
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {stats.map(stat => (
+          <article key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-500">{stat.label}</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{stat.value}</p>
+                <p className="mt-1 text-xs text-slate-400">{stat.detail}</p>
               </div>
-              <div className={`text-sm font-bold ${
-                stat.change.includes('+') ? 'text-green-600' :
-                stat.change === 'Atención' ? 'text-red-600' : 'text-blue-600'
-              }`}>
-                {stat.change}
-              </div>
+              <div className="rounded-xl bg-cyan-50 p-3 text-cyan-700"><stat.icon size={22} /></div>
             </div>
-            <div className="text-3xl font-bold text-slate-800 mb-1">{stat.value}</div>
-            <div className="text-sm text-slate-600">{stat.label}</div>
-            <div className="text-xs text-slate-400 mt-1">{stat.subtitle}</div>
-          </div>
+          </article>
         ))}
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
-        <button
-          onClick={() => setCurrentView('ai-generator')}
-          className="p-6 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all text-left group"
-        >
-          <Wand2 size={32} className="mb-3 group-hover:rotate-12 transition-all" />
-          <h3 className="text-xl font-bold mb-1">Crear con IA</h3>
-          <p className="text-purple-100 text-sm">Genera pantallas automáticamente con Claude</p>
-        </button>
-
-        <button
-          onClick={() => setCurrentView('media')}
-          className="p-6 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all text-left group"
-        >
-          <Upload size={32} className="mb-3 group-hover:-translate-y-1 transition-all" />
-          <h3 className="text-xl font-bold mb-1">Subir Media</h3>
-          <p className="text-blue-100 text-sm">Videos, imágenes y animaciones</p>
-        </button>
-
-        {hasPermission('backups') && (
-          <button
-            onClick={createBackup}
-            className="p-6 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all text-left group"
-          >
-            <Save size={32} className="mb-3 group-hover:scale-110 transition-all" />
-            <h3 className="text-xl font-bold mb-1">Crear Backup</h3>
-            <p className="text-green-100 text-sm">Respaldo completo del sistema</p>
-          </button>
-        )}
+      <div className="grid gap-5 lg:grid-cols-3">
+        <ModuleCard title="Motor Xibo" status="Implementado" description="OAuth2 server-side, health, displays y scheduling API." />
+        <ModuleCard title="Admin PWA" status="Implementado" description="Manifest, service worker y UI guiada para integración." />
+        <ModuleCard title="Studio / IA / Tickets" status="Siguiente" description="Se conectarán sobre la misma capa API sin exponer Xibo." />
       </div>
-
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="p-6 rounded-2xl bg-white shadow-lg border border-slate-200 hover:shadow-xl transition-all cursor-pointer"
-             onClick={() => setCurrentView('signage')}>
-          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Monitor className="text-blue-500" />
-            Digital Signage
-          </h3>
-          <div className="text-4xl font-bold text-blue-600 mb-2">{screens.signage.length}</div>
-          <div className="text-sm text-slate-600 mb-3">
-            {screens.signage.filter(s => s.status === 'online').length} online
-          </div>
-          <button className="text-sm text-blue-600 hover:underline flex items-center gap-1">
-            Ver todas <ChevronRight size={16} />
-          </button>
-        </div>
-
-        <div className="p-6 rounded-2xl bg-white shadow-lg border border-slate-200 hover:shadow-xl transition-all cursor-pointer"
-             onClick={() => setCurrentView('kiosk')}>
-          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Smartphone className="text-green-500" />
-            Kioscos
-          </h3>
-          <div className="text-4xl font-bold text-green-600 mb-2">{screens.kiosk.length}</div>
-          <div className="text-sm text-slate-600 mb-3">
-            {screens.kiosk.filter(s => s.status === 'online').length} online
-          </div>
-          <button className="text-sm text-green-600 hover:underline flex items-center gap-1">
-            Ver todos <ChevronRight size={16} />
-          </button>
-        </div>
-
-        <div className="p-6 rounded-2xl bg-white shadow-lg border border-slate-200 hover:shadow-xl transition-all cursor-pointer"
-             onClick={() => setCurrentView('dashboards')}>
-          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <BarChart3 className="text-purple-500" />
-            Dashboards
-          </h3>
-          <div className="text-4xl font-bold text-purple-600 mb-2">{screens.dashboard.length}</div>
-          <div className="text-sm text-slate-600 mb-3">
-            {screens.dashboard.filter(s => s.status === 'online').length} online
-          </div>
-          <button className="text-sm text-purple-600 hover:underline flex items-center gap-1">
-            Ver todos <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-
-      <div className="p-6 rounded-2xl bg-white shadow-lg border border-slate-200">
-        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <Activity className="text-blue-500" />
-          Actividad Reciente
-        </h3>
-        <div className="space-y-3">
-          {[...screens.signage, ...screens.kiosk, ...screens.dashboard]
-            .sort((a, b) => new Date(b.lastSync) - new Date(a.lastSync))
-            .slice(0, 5)
-            .map(screen => (
-              <div key={screen.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${
-                    screen.status === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-                  }`} />
-                  <div>
-                    <div className="font-semibold text-slate-800">{screen.name}</div>
-                    <div className="text-xs text-slate-600">{screen.zone}</div>
-                  </div>
-                </div>
-                <div className="text-xs text-slate-500">
-                  Sync: {screen.lastSync}
-                </div>
-              </div>
-            ))}
-        </div>
-      </div>
-    </div>
+    </section>
   );
-};
+}
 
-export default DashboardView;
+function ModuleCard({ title, status, description }: { title: string; status: string; description: string }) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-bold text-slate-900">{title}</h3>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{status}</span>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p>
+    </article>
+  );
+}
