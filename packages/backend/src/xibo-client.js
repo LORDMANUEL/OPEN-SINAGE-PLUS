@@ -1,19 +1,9 @@
 function normalizeBaseUrl(value) {
-  if (!value || typeof value !== 'string') {
-    throw new Error('Xibo baseUrl is required');
-  }
+  if (!value || typeof value !== 'string') throw new Error('Xibo baseUrl is required');
 
   let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error('Xibo baseUrl must be a valid HTTP(S) URL');
-  }
-
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error('Xibo baseUrl must use HTTP or HTTPS');
-  }
-
+  try { parsed = new URL(value); } catch { throw new Error('Xibo baseUrl must be a valid HTTP(S) URL'); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Xibo baseUrl must use HTTP or HTTPS');
   return value.replace(/\/+$/, '');
 }
 
@@ -41,13 +31,11 @@ class XiboClient {
       client_id: this.clientId,
       client_secret: this.clientSecret,
     });
-
     const response = await this.#fetch(`${this.baseUrl}/api/authorize/access_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
-
     const payload = await this.#parseResponse(response);
     if (!payload.access_token) throw new Error('Xibo OAuth response did not contain access_token');
 
@@ -58,24 +46,31 @@ class XiboClient {
 
   async request(path, options = {}) {
     const token = await this.authenticate();
-    const headers = {
-      Accept: 'application/json',
-      ...(options.headers || {}),
-      Authorization: `Bearer ${token}`,
-    };
-
+    const headers = { Accept: 'application/json', ...(options.headers || {}), Authorization: `Bearer ${token}` };
     const response = await this.#fetch(`${this.baseUrl}${path}`, { ...options, headers });
     return this.#parseResponse(response);
   }
 
-  async getDisplays() {
-    return this.request('/api/display');
+  async getDisplays() { return this.request('/api/display'); }
+  async getLayouts() { return this.request('/api/layout'); }
+  async getLibrary() { return this.request('/api/library'); }
+  async getPlaylists() { return this.request('/api/playlist'); }
+  async getDisplayGroups() { return this.request('/api/displaygroup'); }
+  async getSchedules() { return this.request('/api/schedule'); }
+
+  async publishLayout(layoutId) {
+    if (!Number.isInteger(Number(layoutId)) || Number(layoutId) <= 0) throw new Error('layoutId must be a positive integer');
+    return this.request(`/api/layout/publish/${Number(layoutId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: '',
+    });
   }
 
   async createSchedule(payload) {
     const body = new URLSearchParams();
     for (const [key, value] of Object.entries(payload || {})) {
-      if (value === undefined || value === null) continue;
+      if (value === undefined || value === null || value === '') continue;
       if (Array.isArray(value)) {
         for (const item of value) body.append(`${key}[]`, String(item));
       } else {
@@ -93,14 +88,11 @@ class XiboClient {
   async #fetch(url, options) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      return await this.fetchImpl(url, { ...options, signal: controller.signal });
-    } catch (error) {
+    try { return await this.fetchImpl(url, { ...options, signal: controller.signal }); }
+    catch (error) {
       if (error && error.name === 'AbortError') throw new Error('Xibo request timed out');
       throw error;
-    } finally {
-      clearTimeout(timer);
-    }
+    } finally { clearTimeout(timer); }
   }
 
   async #parseResponse(response) {
@@ -109,7 +101,6 @@ class XiboClient {
     if (text) {
       try { payload = JSON.parse(text); } catch { payload = text; }
     }
-
     if (!response.ok) {
       const message = typeof payload === 'object' && payload
         ? payload.message || payload.error || JSON.stringify(payload)
@@ -118,7 +109,6 @@ class XiboClient {
       error.status = response.status;
       throw error;
     }
-
     return payload;
   }
 }
