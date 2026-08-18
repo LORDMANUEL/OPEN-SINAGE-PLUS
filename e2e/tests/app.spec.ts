@@ -5,16 +5,17 @@ async function login(page: Page) {
   await page.fill('#email', 'admin@empresa.com');
   await page.fill('#password', 'admin123');
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
-  await expect(page.getByRole('heading', { name: 'Dashboard General' })).toBeVisible();
+  await expect(page.getByRole('banner').getByRole('heading', { name: 'Dashboard General' })).toBeVisible();
 }
 
 test.describe('Open Signage Plus V2', () => {
   test('admin can log in and navigate to local screen inventory', async ({ page }) => {
     await login(page);
     await page.getByRole('button', { name: /Pantallas Signage/ }).click();
-    await expect(page.getByRole('heading', { name: 'Pantallas Digital Signage' })).toBeVisible();
-    await page.getByRole('button', { name: /Nueva pantalla local/i }).click();
-    await expect(page.getByText(/Nueva Digital Signage 3/)).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(main.getByRole('heading', { name: 'Pantallas Digital Signage' })).toBeVisible();
+    await main.getByRole('button', { name: /Nueva pantalla local/i }).click();
+    await expect(main.getByText(/Nueva Digital Signage 3/)).toBeVisible();
   });
 
   test('Motor Xibo view renders live gateway and display state', async ({ page }) => {
@@ -24,9 +25,10 @@ test.describe('Open Signage Plus V2', () => {
 
     await login(page);
     await page.getByRole('button', { name: 'Motor Xibo' }).click();
-    await expect(page.getByRole('heading', { name: 'Motor Xibo' })).toBeVisible();
-    await expect(page.getByText('OAuth2 validado')).toBeVisible();
-    await expect(page.getByText('Lobby Principal')).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(main.getByRole('heading', { name: 'Motor Xibo' })).toBeVisible();
+    await expect(main.getByText('OAuth2 validado')).toBeVisible();
+    await expect(main.getByText('Lobby Principal')).toBeVisible();
   });
 
   test('user can log out', async ({ page }) => {
