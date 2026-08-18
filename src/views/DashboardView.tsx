@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, Monitor, Package } from 'lucide-react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/app-context';
 
 export default function DashboardView() {
   const { screens, mediaLibrary, tickets } = useAppContext();
