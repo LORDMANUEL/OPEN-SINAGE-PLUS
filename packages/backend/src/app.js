@@ -18,7 +18,7 @@ function createApp({ xiboClient }) {
       await xiboClient.authenticate();
       res.json({ connected: true });
     } catch (error) {
-      res.status(502).json({ connected: false, error: sanitizeError(error) });
+      res.json({ connected: false, error: sanitizeError(error) });
     }
   });
 
