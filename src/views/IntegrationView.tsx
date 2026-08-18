@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, RefreshCw, Server, Unplug, Monitor } from 'lucide-react';
 import { openSignageApi, type XiboDisplay } from '../services/openSignageApi';
 
@@ -74,9 +74,7 @@ export default function IntegrationView() {
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -101,9 +99,7 @@ export default function IntegrationView() {
                   <p className="font-semibold text-slate-900">{String(display.display ?? `Display ${display.displayId ?? index + 1}`)}</p>
                   <p className="text-sm text-slate-500">ID {String(display.displayId ?? '—')}</p>
                 </div>
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                  Registrado
-                </span>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Registrado</span>
               </div>
             ))}
           </div>
@@ -113,7 +109,7 @@ export default function IntegrationView() {
   );
 }
 
-function StatusCard({ title, ok, loading, icon, detail }: { title: string; ok: boolean; loading: boolean; icon: React.ReactNode; detail: string }) {
+function StatusCard({ title, ok, loading, icon, detail }: { title: string; ok: boolean; loading: boolean; icon: ReactNode; detail: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
