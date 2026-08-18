@@ -22,12 +22,23 @@ function createApp({ xiboClient }) {
     }
   });
 
-  app.get('/api/xibo/displays', async (_req, res) => {
+  addCollectionRoute(app, '/api/xibo/displays', 'displays', () => xiboClient.getDisplays());
+  addCollectionRoute(app, '/api/xibo/layouts', 'layouts', () => xiboClient.getLayouts());
+  addCollectionRoute(app, '/api/xibo/library', 'media', () => xiboClient.getLibrary());
+  addCollectionRoute(app, '/api/xibo/playlists', 'playlists', () => xiboClient.getPlaylists());
+  addCollectionRoute(app, '/api/xibo/display-groups', 'displayGroups', () => xiboClient.getDisplayGroups());
+  addCollectionRoute(app, '/api/xibo/schedules', 'schedules', () => xiboClient.getSchedules());
+
+  app.post('/api/xibo/layouts/:layoutId/publish', async (req, res) => {
+    const layoutId = Number(req.params.layoutId);
+    if (!Number.isInteger(layoutId) || layoutId <= 0) {
+      return res.status(400).json({ error: 'INVALID_LAYOUT', message: 'layoutId must be a positive integer' });
+    }
     try {
-      const displays = await xiboClient.getDisplays();
-      res.json({ displays: Array.isArray(displays) ? displays : [] });
+      const layout = await xiboClient.publishLayout(layoutId);
+      return res.json({ layout });
     } catch (error) {
-      res.status(502).json({ error: 'XIBO_REQUEST_FAILED', message: sanitizeError(error) });
+      return xiboError(res, error);
     }
   });
 
@@ -44,12 +55,27 @@ function createApp({ xiboClient }) {
       const event = await xiboClient.createSchedule(payload);
       return res.status(201).json({ event });
     } catch (error) {
-      return res.status(502).json({ error: 'XIBO_REQUEST_FAILED', message: sanitizeError(error) });
+      return xiboError(res, error);
     }
   });
 
   app.use((_req, res) => res.status(404).json({ error: 'NOT_FOUND' }));
   return app;
+}
+
+function addCollectionRoute(app, path, key, loader) {
+  app.get(path, async (_req, res) => {
+    try {
+      const items = await loader();
+      res.json({ [key]: Array.isArray(items) ? items : [] });
+    } catch (error) {
+      xiboError(res, error);
+    }
+  });
+}
+
+function xiboError(res, error) {
+  return res.status(502).json({ error: 'XIBO_REQUEST_FAILED', message: sanitizeError(error) });
 }
 
 function sanitizeError(error) {
