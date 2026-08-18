@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
-async function login(page: Parameters<typeof test>[0] extends never ? never : any) {
+async function login(page: Page) {
   await page.goto('/');
   await page.fill('#email', 'admin@empresa.com');
   await page.fill('#password', 'admin123');
