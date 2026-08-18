@@ -7,10 +7,25 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies and builds
 node_modules
 dist
 dist-ssr
+.vite
+test-results
+playwright-report
 *.local
+
+# Secrets and runtime configuration
+.env
+.env.*
+!.env.example
+config.env
+shared/
+
+# Worktrees
+.worktrees/
+worktrees/
 
 # Editor directories and files
 .vscode/*
