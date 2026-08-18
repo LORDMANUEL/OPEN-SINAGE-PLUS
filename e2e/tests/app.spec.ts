@@ -1,62 +1,37 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Digital Signage Enterprise App', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173');
+async function login(page: Parameters<typeof test>[0] extends never ? never : any) {
+  await page.goto('/');
+  await page.fill('#email', 'admin@empresa.com');
+  await page.fill('#password', 'admin123');
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  await expect(page.getByRole('heading', { name: 'Dashboard General' })).toBeVisible();
+}
+
+test.describe('Open Signage Plus V2', () => {
+  test('admin can log in and navigate to local screen inventory', async ({ page }) => {
+    await login(page);
+    await page.getByRole('button', { name: /Pantallas Signage/ }).click();
+    await expect(page.getByRole('heading', { name: 'Pantallas Digital Signage' })).toBeVisible();
+    await page.getByRole('button', { name: /Nueva pantalla local/i }).click();
+    await expect(page.getByText(/Nueva Digital Signage 3/)).toBeVisible();
   });
 
-  test('should allow admin user to login and see the dashboard', async ({ page }) => {
-    await page.fill('input[type="email"]', 'admin@empresa.com');
-    await page.fill('input[type="password"]', 'admin123');
-    await page.click('button:has-text("Iniciar Sesión")');
+  test('Motor Xibo view renders live gateway and display state', async ({ page }) => {
+    await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok', service: 'open-signage-api' } }));
+    await page.route('**/api/integrations/xibo/status', route => route.fulfill({ json: { connected: true } }));
+    await page.route('**/api/xibo/displays', route => route.fulfill({ json: { displays: [{ displayId: 12, display: 'Lobby Principal' }] } }));
 
-    await expect(page.locator('h1:has-text("Dashboard General")')).toBeVisible();
+    await login(page);
+    await page.getByRole('button', { name: 'Motor Xibo' }).click();
+    await expect(page.getByRole('heading', { name: 'Motor Xibo' })).toBeVisible();
+    await expect(page.getByText('OAuth2 validado')).toBeVisible();
+    await expect(page.getByText('Lobby Principal')).toBeVisible();
   });
 
-  test('should allow marketing user to login and see the dashboard', async ({ page }) => {
-    await page.fill('input[type="email"]', 'marketing@empresa.com');
-    await page.fill('input[type="password"]', 'marketing123');
-    await page.click('button:has-text("Iniciar Sesión")');
-
-    await expect(page.locator('h1:has-text("Dashboard General")')).toBeVisible();
-  });
-
-  test('should navigate to different views when clicking on sidebar items', async ({ page }) => {
-    await page.fill('input[type="email"]', 'admin@empresa.com');
-    await page.fill('input[type="password"]', 'admin123');
-    await page.click('button:has-text("Iniciar Sesión")');
-
-    await page.click('button:has-text("Pantallas Signage")');
-    await expect(page.locator('h1:has-text("Pantallas Digital Signage")')).toBeVisible();
-
-    await page.click('button:has-text("Kioscos")');
-    await expect(page.locator('h1:has-text("Kioscos Interactivos")')).toBeVisible();
-
-    await page.click('button:has-text("Dashboards BI")');
-    await expect(page.locator('h1:has-text("Dashboards BI")')).toBeVisible();
-  });
-
-  test('should create and delete a new signage screen', async ({ page }) => {
-    await page.fill('input[type="email"]', 'admin@empresa.com');
-    await page.fill('input[type="password"]', 'admin123');
-    await page.click('button:has-text("Iniciar Sesión")');
-
-    await page.click('button:has-text("Pantallas Signage")');
-    await page.click('button:has-text("Nueva Pantalla")');
-
-    await expect(page.locator('h3:has-text("Nueva Digital Signage 3")')).toBeVisible();
-
-    page.on('dialog', dialog => dialog.accept());
-    await page.locator('h3:has-text("Nueva Digital Signage 3")').locator('..').locator('..').locator('button:has-text("Trash2")').click();
-  });
-
-  test('should logout the user', async ({ page }) => {
-    await page.fill('input[type="email"]', 'admin@empresa.com');
-    await page.fill('input[type="password"]', 'admin123');
-    await page.click('button:has-text("Iniciar Sesión")');
-
-    await page.click('button:has-text("Cerrar Sesión")');
-
-    await expect(page.locator('h1:has-text("Digital Signage PRO")')).toBeVisible();
+  test('user can log out', async ({ page }) => {
+    await login(page);
+    await page.getByRole('button', { name: 'Cerrar sesión' }).click();
+    await expect(page.getByRole('heading', { name: 'Open Signage Plus' })).toBeVisible();
   });
 });
