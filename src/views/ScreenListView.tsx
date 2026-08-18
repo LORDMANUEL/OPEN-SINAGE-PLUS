@@ -1,96 +1,61 @@
-import React from 'react';
-import { Plus, Eye, Settings, Trash2, MapPin, Clock, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
-import { useAppContext } from '../context/AppContext';
+import { MapPin, Maximize2, Minimize2, Plus, Trash2 } from 'lucide-react';
+import { useAppContext, type ScreenType } from '../context/AppContext';
 
-const ScreenListView = ({ type, title }) => {
-  const { screens, createNewScreen, deleteScreen, setCurrentView, setSelectedScreen } = useAppContext();
+type ScreenListViewProps = {
+  type: ScreenType;
+  title: string;
+};
+
+export default function ScreenListView({ type, title }: ScreenListViewProps) {
+  const { screens, createNewScreen, deleteScreen } = useAppContext();
   const screensList = screens[type];
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <section className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-1">{title}</h2>
-          <p className="text-slate-600">Total: {screensList.length} pantallas</p>
+          <h2 className="text-2xl font-bold text-slate-800">{title}</h2>
+          <p className="mt-1 text-slate-600">Inventario local: {screensList.length}. Los displays Xibo reales se consultan desde “Motor Xibo”.</p>
         </div>
         <button
+          type="button"
           onClick={() => createNewScreen(type)}
-          className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center gap-2">
-          <Plus size={20} />
-          Nueva Pantalla
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-600 px-5 py-3 font-semibold text-white shadow-lg"
+        >
+          <Plus size={20} /> Nueva pantalla local
         </button>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {screensList.map(screen => (
-          <div key={screen.id} className="p-6 rounded-2xl bg-white shadow-lg border border-slate-200 hover:shadow-xl transition-all group">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-slate-800 mb-1 group-hover:text-blue-600 transition-all">
-                  {screen.name}
-                </h3>
-                <p className="text-sm text-slate-600 flex items-center gap-1">
-                  <MapPin size={14} />
-                  {screen.zone}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  <Clock size={12} className="inline" /> {screen.lastSync}
-                </p>
+          <article key={screen.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-900">{screen.name}</h3>
+                <p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><MapPin size={14} /> {screen.zone}</p>
               </div>
-              <div className={`px-3 py-1 rounded-full text-xs font-bold ${
-                screen.status === 'online'
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-red-100 text-red-700'
-              }`}>
-                {screen.status === 'online' ? '● Online' : '● Offline'}
-              </div>
-            </div>
-
-            {screen.aiGenerated && (
-              <div className="mb-3 px-3 py-1 rounded-lg bg-purple-100 text-purple-700 text-xs font-bold inline-flex items-center gap-1">
-                <Sparkles size={12} />
-                Creado con IA
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 mb-4">
-              <span className={`px-2 py-1 rounded-lg text-xs font-bold ${
-                screen.orientation === 'horizontal'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-purple-100 text-purple-700'
-              }`}>
-                {screen.orientation === 'horizontal' ? <Maximize2 size={10} className="inline" /> : <Minimize2 size={10} className="inline" />}
-                {' '}{screen.orientation}
-              </span>
-              <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">
-                {screen.layout}
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${screen.status === 'online' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                {screen.status}
               </span>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setSelectedScreen(screen);
-                  setCurrentView('preview');
-                }}
-                className="flex-1 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold transition-all flex items-center justify-center gap-2">
-                <Eye size={16} />
-                Ver
-              </button>
-              <button className="px-4 py-2 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 transition-all">
-                <Settings size={16} />
-              </button>
-              <button
-                onClick={() => deleteScreen(type, screen.id)}
-                className="px-4 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 transition-all">
+            <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold">
+              <span className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-blue-700">
+                {screen.orientation === 'horizontal' ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                {screen.orientation}
+              </span>
+              <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-700">{screen.layout}</span>
+            </div>
+
+            <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+              <span className="text-xs text-slate-400">Sync: {screen.lastSync}</span>
+              <button type="button" aria-label={`Eliminar ${screen.name}`} onClick={() => deleteScreen(type, screen.id)} className="rounded-lg bg-red-50 p-2 text-red-600 hover:bg-red-100">
                 <Trash2 size={16} />
               </button>
             </div>
-          </div>
+          </article>
         ))}
       </div>
-    </div>
+    </section>
   );
-};
-
-export default ScreenListView;
+}
