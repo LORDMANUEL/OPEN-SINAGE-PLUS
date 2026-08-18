@@ -29,7 +29,24 @@ test('Xibo status authenticates through server side adapter', async () => {
   await withServer(createApp({ xiboClient: fakeXibo }), async base => {
     const response = await fetch(`${base}/api/integrations/xibo/status`);
     const body = await response.json();
+    assert.equal(response.status, 200);
     assert.equal(body.connected, true);
+  });
+});
+
+test('Xibo status stays HTTP 200 and reports disconnected when integration is unavailable', async () => {
+  const unavailable = {
+    async authenticate() { throw new Error('Xibo integration is not configured'); },
+    async getDisplays() { throw new Error('Xibo integration is not configured'); },
+    async createSchedule() { throw new Error('Xibo integration is not configured'); },
+  };
+
+  await withServer(createApp({ xiboClient: unavailable }), async base => {
+    const response = await fetch(`${base}/api/integrations/xibo/status`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.connected, false);
+    assert.match(body.error, /not configured/i);
   });
 });
 
