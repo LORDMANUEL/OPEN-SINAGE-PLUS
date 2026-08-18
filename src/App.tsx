@@ -1,19 +1,17 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AppProvider, useAppContext } from './context/AppContext';
 import LoginScreen from './views/LoginScreen';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import DashboardView from './views/DashboardView';
 import ScreenListView from './views/ScreenListView';
-// Import other views as they are created
+import IntegrationView from './views/IntegrationView';
 
 function App() {
   const { isLoggedIn } = useAppContext();
   const [currentView, setCurrentView] = useState('dashboard');
 
-  if (!isLoggedIn) {
-    return <LoginScreen />;
-  }
+  if (!isLoggedIn) return <LoginScreen />;
 
   const renderContent = () => {
     switch (currentView) {
@@ -25,7 +23,9 @@ function App() {
         return <ScreenListView type="kiosk" title="Kioscos Interactivos" />;
       case 'dashboards':
         return <ScreenListView type="dashboard" title="Dashboards BI" />;
-      // Add cases for other views here
+      case 'integration':
+      case 'settings':
+        return <IntegrationView />;
       default:
         return <DashboardView />;
     }
@@ -34,20 +34,18 @@ function App() {
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
-      <div className="flex-1 ml-72 transition-all duration-300">
+      <div className="ml-72 flex-1 transition-all duration-300">
         <TopBar currentView={currentView} />
-        <div className="p-6">
-          {renderContent()}
-        </div>
+        <main className="p-6">{renderContent()}</main>
       </div>
     </div>
   );
 }
 
-const AppWrapper = () => (
-  <AppProvider>
-    <App />
-  </AppProvider>
-);
-
-export default AppWrapper;
+export default function AppWrapper() {
+  return (
+    <AppProvider>
+      <App />
+    </AppProvider>
+  );
+}
