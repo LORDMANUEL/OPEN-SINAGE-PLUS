@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Bell, Clock } from 'lucide-react';
-import { useAppContext } from '../context/AppContext';
+import { useAppContext } from '../context/app-context';
 
 const viewTitles: Record<string, string> = {
   dashboard: 'Dashboard General',
