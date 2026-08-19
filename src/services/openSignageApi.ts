@@ -19,7 +19,9 @@ export type PlayerItem =
   | { id?: string; type: 'qr'; value: string; label?: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number };
 export interface PlayerScene { token?: string; name: string; duration?: number; background?: string; items: PlayerItem[]; createdAt?: string; updatedAt?: string }
 export interface AiStatus { configured: boolean; provider: string | null; model: string | null }
-export interface Ticket { id: string; queue: string; prefix: string; sequence?: number; number: string; customerName?: string; status: 'waiting' | 'called' | 'completed'; desk?: string; createdAt?: string; calledAt?: string; completedAt?: string; updatedAt?: string }
+export interface AiDiagnostics extends AiStatus { fallbackConfigured?: boolean; metrics?: { requests?: number; failures?: number; lastLatencyMs?: number | null; lastError?: string | null; lastSuccessAt?: string | null } }
+export interface AiHealth { ok: boolean; configured: boolean; provider?: string | null; model?: string | null; latencyMs?: number; status?: number; error?: string }
+export interface Ticket { id: string; queue: string; prefix: string; sequence?: number; number: string; customerName?: string; service?: string; priority?: number; status: 'waiting' | 'called' | 'completed'; desk?: string; waitMs?: number | null; serviceMs?: number | null; createdAt?: string; calledAt?: string; completedAt?: string; updatedAt?: string }
 export interface PlayerDevice { deviceToken: string; pairingCode: string; sceneToken: string | null; name?: string; userAgent?: string; createdAt?: string; updatedAt?: string; lastSeenAt?: string; online?: boolean; appVersion?: string; resolution?: string; orientation?: string; storageFreeBytes?: number | null; storageQuotaBytes?: number | null; currentSceneToken?: string | null; lastError?: string }
 export type UserRole = 'admin' | 'marketing' | 'operator' | 'viewer';
 export interface SessionUser { id?: string; email: string; role: UserRole; name?: string }
@@ -31,7 +33,7 @@ export interface Campaign { id: string; name: string; status: 'draft' | 'review'
 export interface PlatformSetting { key: string; value: unknown; updatedAt?: string }
 export interface DynamicQr { id: string; slug: string; destination: string; scanCount: number; enabled: boolean; createdAt: string; updatedAt: string }
 export interface FleetHealth { total: number; online: number; offline: number; errors: number; devices: PlayerDevice[] }
-export interface SystemHealth { status: string; checkedAt: string; latencyMs: number; node: string; uptimeSeconds: number; hostname: string; memory: Record<string, number>; storage: Record<string, number>; xibo: { ok: boolean; error?: string }; ai: AiStatus; fleet: FleetHealth }
+export interface SystemHealth { status: string; checkedAt: string; latencyMs: number; node: string; uptimeSeconds: number; hostname: string; memory: Record<string, number>; storage: Record<string, number>; xibo: { ok: boolean; error?: string }; ai: AiDiagnostics; fleet: FleetHealth }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const SESSION_KEY = 'open-signage-admin-session';
@@ -111,10 +113,12 @@ export const openSignageApi = {
   dynamicQr: async () => (await apiRequest<{ qr: DynamicQr[] }>('/api/platform/qr')).qr,
   createDynamicQr: async (slug: string, destination: string) => (await apiRequest<{ qr: DynamicQr }>('/api/platform/qr', { method: 'POST', body: JSON.stringify({ slug, destination }) })).qr,
   aiStatus: () => apiRequest<AiStatus>('/api/ai/status'),
+  aiHealth: () => apiRequest<{ health: AiHealth; diagnostics: AiDiagnostics }>('/api/ai/health'),
   generateScene: async (prompt: string) => (await apiRequest<{ scene: PlayerScene }>('/api/ai/generate-scene', { method: 'POST', body: JSON.stringify({ prompt }) })).scene,
+  reviseScene: async (scene: PlayerScene, instruction: string) => (await apiRequest<{ scene: PlayerScene }>('/api/ai/revise-scene', { method: 'POST', body: JSON.stringify({ scene, instruction }) })).scene,
   qrUrl: (value: string) => `${API_BASE}/api/qr?value=${encodeURIComponent(value)}`,
   dynamicQrUrl: (slug: string) => `${window.location.origin}/q/${encodeURIComponent(slug)}`,
-  issueTicket: async (queue: string, prefix = 'A', customerName = '') => (await apiRequest<{ ticket: Ticket }>(`/api/queues/${encodeURIComponent(queue)}/tickets`, { method: 'POST', body: JSON.stringify({ prefix, customerName }) })).ticket,
+  issueTicket: async (queue: string, prefix = 'A', customerName = '', service = '', priority = 0) => (await apiRequest<{ ticket: Ticket }>(`/api/queues/${encodeURIComponent(queue)}/tickets`, { method: 'POST', body: JSON.stringify({ prefix, customerName, service, priority }) })).ticket,
   listTickets: async (queue: string) => (await apiRequest<{ tickets: Ticket[] }>(`/api/queues/${encodeURIComponent(queue)}`)).tickets,
   callNextTicket: async (queue: string, desk: string) => (await apiRequest<{ ticket: Ticket }>(`/api/queues/${encodeURIComponent(queue)}/call-next`, { method: 'POST', body: JSON.stringify({ desk }) })).ticket,
   completeTicket: async (queue: string, ticketId: string) => (await apiRequest<{ ticket: Ticket }>(`/api/queues/${encodeURIComponent(queue)}/tickets/${encodeURIComponent(ticketId)}/complete`, { method: 'POST' })).ticket,
