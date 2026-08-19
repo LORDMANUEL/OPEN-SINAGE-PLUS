@@ -22,13 +22,21 @@ export function releasesFor(tags, version, channel) {
   return tags.map(parseReleaseTag).filter(Boolean).filter(item => item.version === version && item.channel === channel);
 }
 
+function contiguousCount(releases, channel) {
+  const numbers = [...new Set(releases.map(item => item.number).filter(Number.isInteger))].sort((a,b) => a-b);
+  for (let i = 0; i < numbers.length; i++) {
+    if (numbers[i] !== i + 1) throw new Error(`${channel} release sequence has a gap before ${numbers[i]}`);
+  }
+  return numbers.length;
+}
+
 export function channelStatus({ tags, version, alphasPerBeta = 5, betasPerStable = 3 }) {
   parseVersion(version);
   const alphas = releasesFor(tags, version, 'alpha');
   const betas = releasesFor(tags, version, 'beta');
   const stable = releasesFor(tags, version, 'stable');
-  const alphaMax = Math.max(0, ...alphas.map(item => item.number || 0));
-  const betaMax = Math.max(0, ...betas.map(item => item.number || 0));
+  const alphaMax = contiguousCount(alphas, 'alpha');
+  const betaMax = contiguousCount(betas, 'beta');
   return {
     version,
     alphaCount: alphas.length,
