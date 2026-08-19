@@ -60,6 +60,40 @@ archive="$(find "$tmp/backups" -maxdepth 1 -type f -name 'open-signage-plus-*.ta
 [[ -n "$archive" && -f "$archive" ]] || { echo 'backup archive was not created' >&2; exit 1; }
 ./scripts/verify-backup.sh "$archive"
 
+# Missing sidecar must never be accepted as a verified backup.
+cp "$archive" "$tmp/no-sidecar.tar.gz"
+if ./scripts/verify-backup.sh "$tmp/no-sidecar.tar.gz" >/dev/null 2>&1; then
+  echo 'backup without sidecar unexpectedly verified' >&2
+  exit 1
+fi
+
+# A nested archive cannot escape its target directory with ../ entries.
+mal="$tmp/malicious"
+mkdir -p "$mal"
+cp "$tmp/test.env" "$mal/env"
+printf 'CREATE TABLE malicious_test(id INT);\n' > "$mal/xibo-cms.sql"
+printf '%s\n' "$(date -u +%Y%m%dT%H%M%SZ)" > "$mal/created-at.txt"
+python3 - "$mal/open-signage.tar" <<'PY'
+import io, sys, tarfile
+with tarfile.open(sys.argv[1], 'w') as archive:
+    data = b'ESCAPE'
+    item = tarfile.TarInfo('../escape.txt')
+    item.size = len(data)
+    archive.addfile(item, io.BytesIO(data))
+PY
+(
+  cd "$mal"
+  sha256sum created-at.txt env open-signage.tar xibo-cms.sql > SHA256SUMS
+)
+malicious_archive="$tmp/malicious.tar.gz"
+tar -C "$mal" -czf "$malicious_archive" .
+printf '%s  %s\n' "$(sha256sum "$malicious_archive" | awk '{print $1}')" "$(basename "$malicious_archive")" > "$malicious_archive.sha256"
+if ./scripts/verify-backup.sh "$malicious_archive" >/dev/null 2>&1; then
+  echo 'backup with unsafe nested path unexpectedly verified' >&2
+  exit 1
+fi
+[[ ! -e "$tmp/escape.txt" ]] || { echo 'nested archive escaped verification directory' >&2; exit 1; }
+
 rm -rf "$tmp/shared/open-signage" "$tmp/shared/cms/library" "$tmp/shared/cms/custom"
 mkdir -p "$tmp/shared/open-signage" "$tmp/shared/cms/library" "$tmp/shared/cms/custom"
 printf 'CORRUPTED\n' > "$tmp/shared/open-signage/state.txt"
@@ -71,4 +105,4 @@ grep -qx 'MEDIA_OK' "$tmp/shared/cms/library/media.txt"
 grep -qx 'CUSTOM_OK' "$tmp/shared/cms/custom/custom.txt"
 grep -q 'CREATE TABLE lifecycle_test' "$tmp/imported.sql"
 
-echo 'Lifecycle self-test passed: backup -> verify -> destructive change -> restore -> health'
+echo 'Lifecycle self-test passed: integrity gates -> backup -> verify -> destructive change -> restore -> health'
