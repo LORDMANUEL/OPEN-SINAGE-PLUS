@@ -5,7 +5,7 @@ const { DatabaseSync } = require('node:sqlite');
 
 const ROLE_PERMISSIONS = Object.freeze({
   admin: ['*'],
-  marketing: ['campaign:read', 'campaign:write', 'campaign:review', 'media:read', 'media:write', 'screen:read', 'schedule:read', 'schedule:write', 'ai:use', 'qr:manage'],
+  marketing: ['campaign:read', 'campaign:write', 'campaign:review', 'media:read', 'media:write', 'screen:read', 'schedule:read', 'schedule:write', 'ai:use', 'qr:manage', 'health:read', 'device:pair'],
   operator: ['campaign:read', 'screen:read', 'queue:read', 'queue:operate', 'device:pair', 'health:read'],
   viewer: ['campaign:read', 'screen:read', 'media:read', 'schedule:read', 'health:read'],
 });
