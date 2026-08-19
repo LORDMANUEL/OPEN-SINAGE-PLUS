@@ -1,7 +1,7 @@
 const { latestBackupStatus, diskStatus, probeTlsCertificate } = require('./operational-health');
 
 class HealthMonitor {
-  constructor({ deviceStore, xiboClient, notificationService, intervalMs = 60_000, cooldownMs = 15 * 60_000, dataDir = '', backupRoot = '', tlsDomain = '', diskMinFreePercent = 10, backupMaxAgeHours = 30, tlsWarnDays = 21 }) {
+  constructor({ deviceStore, xiboClient, notificationService, intervalMs = 60_000, cooldownMs = 15 * 60_000, dataDir = process.env.OPEN_SIGNAGE_DATA_DIR || '', backupRoot = process.env.BACKUP_MONITOR_ROOT || '', tlsDomain = process.env.DOMAIN || '', diskMinFreePercent = Number(process.env.DISK_FREE_WARN_PERCENT || 10), backupMaxAgeHours = Number(process.env.BACKUP_MAX_AGE_HOURS || 30), tlsWarnDays = Number(process.env.TLS_EXPIRY_WARN_DAYS || 21) }) {
     this.deviceStore = deviceStore;
     this.xiboClient = xiboClient;
     this.notificationService = notificationService;
