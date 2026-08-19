@@ -25,6 +25,8 @@ class PlatformStore {
     if (adminEmail && adminPassword && !this.#getUserRow(String(adminEmail).trim().toLowerCase())) {
       await this.createUser({ email: adminEmail, name: 'Administrador', role: 'admin', password: adminPassword, active: true });
     }
+    // Retention only affects forms that explicitly carry retentionDays in their schema.
+    this.purgeExpiredFormResponses();
     return this;
   }
 
@@ -287,7 +289,8 @@ class PlatformStore {
   createForm({ name, schema }) {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    this.db.prepare('INSERT INTO forms(id,name,schema_json,created_at,updated_at) VALUES(?,?,?,?,?)').run(id, clean(name, 160), JSON.stringify(schema || {}), now, now);
+    const normalizedSchema = normalizeFormSchema(schema);
+    this.db.prepare('INSERT INTO forms(id,name,schema_json,created_at,updated_at) VALUES(?,?,?,?,?)').run(id, clean(name, 160), JSON.stringify(normalizedSchema), now, now);
     return this.getForm(id);
   }
 
@@ -296,17 +299,46 @@ class PlatformStore {
     return row ? { id: row.id, name: row.name, schema: parseJson(row.schema_json, {}), createdAt: row.created_at, updatedAt: row.updated_at } : null;
   }
 
+  /**
+   * Persist a public form response after enforcing the form privacy contract.
+   * __consent is control metadata: it is validated and then removed before storage.
+   */
   submitForm(id, response) {
-    if (!this.getForm(id)) throw new Error('form not found');
+    const form = this.getForm(id);
+    if (!form) throw new Error('form not found');
+    const payload = response && typeof response === 'object' && !Array.isArray(response) ? { ...response } : {};
+    if (form.schema?.consentRequired && payload.__consent !== true) throw new Error('form consent is required');
+    delete payload.__consent;
     const responseId = crypto.randomUUID();
     const at = new Date().toISOString();
-    this.db.prepare('INSERT INTO form_responses(id,form_id,response_json,created_at) VALUES(?,?,?,?)').run(responseId, String(id), JSON.stringify(response || {}), at);
-    return { id: responseId, formId: String(id), response, createdAt: at };
+    this.db.prepare('INSERT INTO form_responses(id,form_id,response_json,created_at) VALUES(?,?,?,?)').run(responseId, String(id), JSON.stringify(payload), at);
+    this.purgeExpiredFormResponses();
+    return { id: responseId, formId: String(id), response: payload, createdAt: at };
   }
 
   listFormResponses(id, limit = 500) {
     return this.db.prepare('SELECT * FROM form_responses WHERE form_id=? ORDER BY created_at DESC LIMIT ?').all(String(id), Math.max(1, Math.min(5000, Number(limit) || 500)))
       .map(row => ({ id: row.id, formId: row.form_id, response: parseJson(row.response_json, {}), createdAt: row.created_at }));
+  }
+
+  /** Delete responses only for forms that explicitly define a positive retentionDays. */
+  purgeExpiredFormResponses(now = new Date()) {
+    this.#assertDb();
+    const nowMs = new Date(now).getTime();
+    if (!Number.isFinite(nowMs)) throw new Error('invalid purge date');
+    let deleted = 0;
+    let formsChecked = 0;
+    const forms = this.db.prepare('SELECT id,schema_json FROM forms').all();
+    for (const form of forms) {
+      const schema = parseJson(form.schema_json, {});
+      const retentionDays = Number(schema?.retentionDays);
+      if (!Number.isFinite(retentionDays) || retentionDays <= 0) continue;
+      formsChecked += 1;
+      const cutoff = new Date(nowMs - Math.floor(retentionDays) * 86_400_000).toISOString();
+      const result = this.db.prepare('DELETE FROM form_responses WHERE form_id=? AND created_at<?').run(form.id, cutoff);
+      deleted += Number(result.changes || 0);
+    }
+    return { deleted, formsChecked };
   }
 
   #mapCampaign(row) {
@@ -330,6 +362,18 @@ function normalizeHttpUrl(value) { try { const url = new URL(String(value || '')
 function mapUser(row) { return { id: row.id, email: row.email, name: row.name, role: row.role, active: Boolean(row.active), createdAt: row.created_at, updatedAt: row.updated_at, lastLoginAt: row.last_login_at || null }; }
 function mapVersion(row) { return { id: row.id, campaignId: row.campaign_id, version: Number(row.version), scene: parseJson(row.scene_json, {}), createdBy: row.created_by, createdAt: row.created_at }; }
 function mapQr(row) { return { id: row.id, slug: row.slug, destination: row.destination, scanCount: Number(row.scan_count), enabled: Boolean(row.enabled), createdAt: row.created_at, updatedAt: row.updated_at }; }
+
+function normalizeFormSchema(schema) {
+  const source = schema && typeof schema === 'object' && !Array.isArray(schema) ? schema : {};
+  const retentionRaw = source.retentionDays === undefined || source.retentionDays === null || source.retentionDays === '' ? 365 : Number(source.retentionDays);
+  if (!Number.isInteger(retentionRaw) || retentionRaw < 1 || retentionRaw > 3650) throw new Error('retentionDays must be an integer between 1 and 3650');
+  return {
+    ...source,
+    consentRequired: Boolean(source.consentRequired),
+    consentText: clean(source.consentText || 'Acepto el tratamiento de mis datos para la finalidad indicada en este formulario.', 500),
+    retentionDays: retentionRaw,
+  };
+}
 
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16);
