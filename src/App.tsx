@@ -13,6 +13,7 @@ import PlayerScreen from './views/PlayerScreen';
 import DeviceScreen from './views/DeviceScreen';
 import AiStudioView from './views/AiStudioView';
 import QueueView from './views/QueueView';
+import OperationsView from './views/OperationsView';
 
 function App() {
   const { isLoggedIn, authReady } = useAppContext();
@@ -27,6 +28,7 @@ function App() {
       case 'ai': return <AiStudioView />;
       case 'media': return <MediaView />;
       case 'queues': return <QueueView />;
+      case 'operations': return <OperationsView />;
       case 'signage': return <ScreenListView type="signage" title="Pantallas Xibo" />;
       case 'kiosk': return <ScreenListView type="kiosk" title="Kioscos y Browser Players" />;
       case 'dashboards': return <ScreenListView type="dashboard" title="Layouts y Dashboards Xibo" />;
