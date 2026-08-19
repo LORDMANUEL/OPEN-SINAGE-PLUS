@@ -8,6 +8,10 @@ test('missing Xibo environment does not prevent API startup', async () => {
 
   await assert.rejects(() => integration.authenticate(), /not configured/i);
   await assert.rejects(() => integration.getDisplays(), /not configured/i);
+  await assert.rejects(
+    () => integration.createWebpageWidget({ playlistId: 1, uri: 'https://example.com/player/token' }),
+    /not configured/i,
+  );
 });
 
 test('complete environment creates a configured Xibo client', () => {
