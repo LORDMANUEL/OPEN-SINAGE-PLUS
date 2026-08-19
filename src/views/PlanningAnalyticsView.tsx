@@ -2,15 +2,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { Activity, BellRing, CalendarDays, RefreshCw } from 'lucide-react';
 import { openSignageApi, type XiboDisplayGroup, type XiboSchedule } from '../services/openSignageApi';
 import { adminPlatformApi, type AnalyticsSummary, type NotificationStatus, type SchedulePreview } from '../services/adminPlatformApi';
+import { useAppContext } from '../context/app-context';
 
 type Tab = 'schedule' | 'analytics' | 'notifications';
 
 export default function PlanningAnalyticsView() {
+  const { currentUser } = useAppContext();
   const [tab, setTab] = useState<Tab>('schedule');
   return <section>
-    <header className="section-header"><div><span className="eyebrow">PLANIFICACIÓN Y MEDICIÓN</span><h2>Planning Center</h2><p>Previsualiza programación, detecta conflictos, mide Proof of Play y prueba alertas operativas.</p></div></header>
+    <header className="section-header"><div><span className="eyebrow">PLANIFICACIÓN Y MEDICIÓN</span><h2>Planning Center</h2><p>Previsualiza programación, detecta conflictos, mide Proof of Play y revisa alertas operativas.</p></div></header>
     <div className="inline-actions" style={{ marginBottom: 18 }}><button className={`button ${tab === 'schedule' ? 'button--primary' : 'button--dark'}`} onClick={() => setTab('schedule')}><CalendarDays size={16}/> Calendario</button><button className={`button ${tab === 'analytics' ? 'button--primary' : 'button--dark'}`} onClick={() => setTab('analytics')}><Activity size={16}/> Analytics</button><button className={`button ${tab === 'notifications' ? 'button--primary' : 'button--dark'}`} onClick={() => setTab('notifications')}><BellRing size={16}/> Alertas</button></div>
-    {tab === 'schedule' && <SchedulePanel/>}{tab === 'analytics' && <AnalyticsPanel/>}{tab === 'notifications' && <NotificationsPanel/>}
+    {tab === 'schedule' && <SchedulePanel/>}{tab === 'analytics' && <AnalyticsPanel/>}{tab === 'notifications' && <NotificationsPanel canTest={currentUser?.role === 'admin'}/>} 
   </section>;
 }
 
@@ -45,7 +47,7 @@ function AnalyticsPanel() {
   return <div className="workspace-panel"><div className="panel-title"><h2><Activity size={20}/> Proof of Play</h2><div className="inline-actions"><select aria-label="Periodo de analytics" value={hours} onChange={e => setHours(Number(e.target.value))}><option value={24}>24 horas</option><option value={168}>7 días</option><option value={720}>30 días</option></select><button className="button button--dark" onClick={() => void refresh()}><RefreshCw size={15}/> Actualizar</button></div></div>{message && <div className="notice notice--error">{message}</div>}<div className="queue-summary"><Metric label="Reproducciones" value={summary?.playbackCount ?? 0} hint="Proof of Play"/><Metric label="Interacciones" value={summary?.interactionCount ?? 0} hint="touch / QR / acciones"/><Metric label="Escenas" value={summary?.uniqueScenes ?? 0} hint="únicas"/><Metric label="Dispositivos" value={summary?.uniqueDevices ?? 0} hint="con telemetría"/></div>{summary?.actions && <div className="resource-list">{Object.entries(summary.actions).map(([action, value]) => <div className="resource-row" key={action}><strong>{action}</strong><span>{value}</span></div>)}</div>}</div>;
 }
 
-function NotificationsPanel() {
+function NotificationsPanel({ canTest }: { canTest: boolean }) {
   const [status, setStatus] = useState<NotificationStatus | null>(null);
   const [subject, setSubject] = useState('Open Signage Plus · prueba');
   const [text, setText] = useState('La plataforma puede enviar alertas correctamente.');
@@ -53,7 +55,7 @@ function NotificationsPanel() {
   const refresh = useCallback(async () => { try { setStatus(await adminPlatformApi.notificationStatus()); } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo leer alertas'); } }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   async function testNotification() { try { const result = await adminPlatformApi.testNotification(subject, text); setMessage(`Prueba ejecutada: ${result.results.length} canal(es).`); await refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo enviar prueba'); } }
-  return <div className="workspace-panel form-grid"><div className="panel-title"><h2><BellRing size={20}/> Notificaciones operativas</h2><p>El servidor alerta Xibo desconectado, pantallas offline y otros fallos mediante SMTP/Webhook configurados.</p></div><div className="queue-summary"><Metric label="SMTP" value={status?.smtp ? 'ON' : 'OFF'} hint="TLS"/><Metric label="Webhook" value={status?.webhook ? 'ON' : 'OFF'} hint="HTTPS"/></div><label>Asunto<input value={subject} onChange={e => setSubject(e.target.value)}/></label><label>Mensaje<textarea value={text} onChange={e => setText(e.target.value)} rows={4}/></label><button className="button button--primary" onClick={() => void testNotification()}>Enviar prueba</button>{message && <div className="notice notice--success">{message}</div>}</div>;
+  return <div className="workspace-panel form-grid"><div className="panel-title"><h2><BellRing size={20}/> Notificaciones operativas</h2><p>El servidor alerta Xibo desconectado, pantallas offline y otros fallos mediante SMTP/Webhook configurados.</p></div><div className="queue-summary"><Metric label="SMTP" value={status?.smtp ? 'ON' : 'OFF'} hint="TLS"/><Metric label="Webhook" value={status?.webhook ? 'ON' : 'OFF'} hint="HTTPS"/></div>{canTest ? <><label>Asunto<input value={subject} onChange={e => setSubject(e.target.value)}/></label><label>Mensaje<textarea value={text} onChange={e => setText(e.target.value)} rows={4}/></label><button className="button button--primary" onClick={() => void testNotification()}>Enviar prueba</button></> : <div className="notice">Solo un administrador puede ejecutar pruebas de notificación; el estado de los canales es visible en modo lectura.</div>}{message && <div className="notice notice--success">{message}</div>}</div>;
 }
 
 function Metric({ label, value, hint }: { label: string; value: string | number; hint: string }) { return <div className="metric-card"><span>{label}</span><strong>{value}</strong><small>{hint}</small></div>; }
