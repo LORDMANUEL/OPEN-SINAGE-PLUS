@@ -11,6 +11,8 @@ RUN npm ci --omit=dev \
 COPY index.js ./index.js
 COPY src ./src
 
+RUN mkdir -p /data && chown -R node:node /data /app
+
 ENV NODE_ENV=production
 EXPOSE 3000
 
