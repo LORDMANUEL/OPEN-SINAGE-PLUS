@@ -7,6 +7,18 @@ function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, '');
 }
 
+function appendFormFields(form, payload) {
+  for (const [key, value] of Object.entries(payload || {})) {
+    if (value === undefined || value === null || value === '') continue;
+    if (Array.isArray(value)) {
+      for (const item of value) form.append(`${key}[]`, String(item));
+    } else {
+      form.append(key, String(value));
+    }
+  }
+  return form;
+}
+
 class XiboClient {
   constructor({ baseUrl, clientId, clientSecret, fetchImpl = globalThis.fetch, timeoutMs = 10000 }) {
     this.baseUrl = normalizeBaseUrl(baseUrl);
@@ -58,6 +70,43 @@ class XiboClient {
   async getDisplayGroups() { return this.request('/api/displaygroup'); }
   async getSchedules() { return this.request('/api/schedule'); }
 
+  async createLayout(payload) {
+    if (!payload?.name || typeof payload.name !== 'string') throw new Error('layout name is required');
+    if (!payload.layoutId && !payload.resolutionId) throw new Error('resolutionId or template layoutId is required');
+
+    const body = appendFormFields(new URLSearchParams(), {
+      name: payload.name,
+      description: payload.description,
+      layoutId: payload.layoutId,
+      resolutionId: payload.resolutionId,
+      returnDraft: payload.returnDraft ?? true,
+      code: payload.code,
+    });
+
+    return this.request('/api/layout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+  }
+
+  async uploadMedia({ bytes, fileName, contentType = 'application/octet-stream', name, tags, playlistId }) {
+    if (!bytes || typeof bytes.byteLength !== 'number' || bytes.byteLength === 0) throw new Error('media bytes are required');
+    if (!fileName) throw new Error('fileName is required');
+
+    const form = new FormData();
+    const blob = new Blob([bytes], { type: contentType || 'application/octet-stream' });
+    form.append('files', blob, fileName);
+    if (name) form.append('name', name);
+    if (tags) form.append('tags', tags);
+    if (playlistId) form.append('playlistId', String(playlistId));
+
+    return this.request('/api/library', {
+      method: 'POST',
+      body: form,
+    });
+  }
+
   async publishLayout(layoutId) {
     if (!Number.isInteger(Number(layoutId)) || Number(layoutId) <= 0) throw new Error('layoutId must be a positive integer');
     return this.request(`/api/layout/publish/${Number(layoutId)}`, {
@@ -68,16 +117,7 @@ class XiboClient {
   }
 
   async createSchedule(payload) {
-    const body = new URLSearchParams();
-    for (const [key, value] of Object.entries(payload || {})) {
-      if (value === undefined || value === null || value === '') continue;
-      if (Array.isArray(value)) {
-        for (const item of value) body.append(`${key}[]`, String(item));
-      } else {
-        body.append(key, String(value));
-      }
-    }
-
+    const body = appendFormFields(new URLSearchParams(), payload);
     return this.request('/api/schedule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -113,4 +153,4 @@ class XiboClient {
   }
 }
 
-module.exports = { XiboClient, normalizeBaseUrl };
+module.exports = { XiboClient, normalizeBaseUrl, appendFormFields };
