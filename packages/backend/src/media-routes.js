@@ -1,8 +1,9 @@
 const express = require('express');
+const { permit } = require('./rbac-middleware');
 
 function createMediaRouter({ xiboClient, mediaCatalog, mediaTranscoder, platformStore }) {
   const router = express.Router();
-  router.post('/transcode-upload', express.raw({ type: () => true, limit: 200 * 1024 * 1024 }), async (req, res) => {
+  router.post('/transcode-upload', permit('media:write'), express.raw({ type: () => true, limit: 200 * 1024 * 1024 }), async (req, res) => {
     try {
       if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'INVALID_MEDIA', message: 'media bytes are required' });
       const fileName = cleanHeader(req.get('x-file-name'));
