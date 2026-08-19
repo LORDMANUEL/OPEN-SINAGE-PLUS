@@ -31,7 +31,7 @@ export default function DeviceScreen({ initialToken }: { initialToken?: string |
 
     async function boot() {
       try {
-        let token = initialToken || localStorage.getItem(DEVICE_KEY) || '';
+        const token = initialToken || localStorage.getItem(DEVICE_KEY) || '';
         let current: PlayerDevice;
         if (token) {
           try { current = await openSignageApi.getDevice(token); }
