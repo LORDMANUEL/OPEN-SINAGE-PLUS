@@ -23,12 +23,13 @@ jobs:
         shell: bash
         run: |
           version=$(node -p "require('./release.config.json').stableVersion")
+          package_version=$(node -p "require('./package.json').version")
           tag="v$version"
           if git rev-parse "$tag" >/dev/null 2>&1; then
             echo "$tag already exists"
             exit 0
           fi
-          test "$(node -p \"require('./package.json').version\")" = "$version"
+          test "$package_version" = "$version" || { echo "package version $package_version does not match stableVersion $version"; exit 1; }
           git config user.name 'Open Signage Release Bot'
           git config user.email 'release-bot@users.noreply.github.com'
           git tag -a "$tag" -m "Open Signage Plus $tag"
