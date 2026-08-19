@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: node --test tests/release-policy.test.mjs tests/release-cli.test.mjs tests/release-config.test.mjs tests/sync-lock-metadata.test.mjs
+      - run: node --test tests/release-policy.test.mjs tests/release-cli.test.mjs tests/release-config.test.mjs tests/sync-lock-metadata.test.mjs tests/release-workflow-static.test.mjs
 
   frontend:
     runs-on: ubuntu-latest

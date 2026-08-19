@@ -32,10 +32,14 @@ jobs:
         id: cfg
         shell: bash
         run: |
-          echo "stable=$(node -p \"require('./release.config.json').stableVersion\")" >> "$GITHUB_OUTPUT"
-          echo "next=$(node -p \"require('./release.config.json').nextVersion\")" >> "$GITHUB_OUTPUT"
-          echo "alphas=$(node -p \"require('./release.config.json').alphasPerBeta\")" >> "$GITHUB_OUTPUT"
-          echo "betas=$(node -p \"require('./release.config.json').betasPerStable\")" >> "$GITHUB_OUTPUT"
+          stable=$(node -p "require('./release.config.json').stableVersion")
+          next=$(node -p "require('./release.config.json').nextVersion")
+          alphas=$(node -p "require('./release.config.json').alphasPerBeta")
+          betas=$(node -p "require('./release.config.json').betasPerStable")
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "alphas=$alphas" >> "$GITHUB_OUTPUT"
+          echo "betas=$betas" >> "$GITHUB_OUTPUT"
 
       - name: Validate branch for channel
         shell: bash
@@ -116,7 +120,8 @@ jobs:
         shell: bash
         run: |
           version='${{ steps.cfg.outputs.stable }}'
-          test "$(node -p \"require('./package.json').version\")" = "$version" || { echo 'package version does not match stableVersion'; exit 1; }
+          package_version=$(node -p "require('./package.json').version")
+          test "$package_version" = "$version" || { echo "package version $package_version does not match stableVersion $version"; exit 1; }
           node scripts/release/release-cli.mjs assert-promotion --version "$version" --from beta --to stable --alphas-per-beta '${{ steps.cfg.outputs.alphas }}' --betas-per-stable '${{ steps.cfg.outputs.betas }}'
           tag="v$version"
           git rev-parse "$tag" >/dev/null 2>&1 && { echo "$tag already exists"; exit 1; } || true
