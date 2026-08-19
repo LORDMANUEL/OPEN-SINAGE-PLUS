@@ -2,7 +2,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const ALLOWED_TYPES = new Set(['text', 'image', 'video', 'html']);
+const ALLOWED_TYPES = new Set(['text', 'image', 'video', 'html', 'button', 'qr']);
+const ALLOWED_ACTIONS = new Set(['openUrl', 'ticket']);
 
 class SceneStore {
   constructor({ dataDir = process.env.OPEN_SIGNAGE_DATA_DIR || '/data' } = {}) {
@@ -85,8 +86,8 @@ function normalizeItem(item, index) {
     type: item.type,
     x: clampPercent(item.x, 0),
     y: clampPercent(item.y, 0),
-    width: clampPercent(item.width, 100),
-    height: clampPercent(item.height, 100),
+    width: clampPercent(item.width, item.type === 'button' ? 30 : item.type === 'qr' ? 20 : 100),
+    height: clampPercent(item.height, item.type === 'button' ? 10 : item.type === 'qr' ? 20 : 100),
     zIndex: Math.max(0, Math.min(1000, Number(item.zIndex || index))),
   };
 
@@ -108,11 +109,36 @@ function normalizeItem(item, index) {
     }
   }
 
-  if (item.type === 'html') {
-    normalized.html = sanitizeHtmlFragment(String(item.html || ''));
+  if (item.type === 'html') normalized.html = sanitizeHtmlFragment(String(item.html || ''));
+
+  if (item.type === 'button') {
+    normalized.text = cleanText(item.text, 200) || 'Continuar';
+    normalized.color = cleanText(item.color || '#ffffff', 40) || '#ffffff';
+    normalized.background = cleanText(item.background || '#2166f3', 80) || '#2166f3';
+    normalized.action = normalizeAction(item.action);
+  }
+
+  if (item.type === 'qr') {
+    normalized.value = cleanText(item.value, 2000);
+    if (!normalized.value) throw new Error('qr item requires a value');
+    normalized.label = cleanText(item.label, 200);
   }
 
   return normalized;
+}
+
+function normalizeAction(input) {
+  if (!input || typeof input !== 'object' || !ALLOWED_ACTIONS.has(input.type)) throw new Error('unsupported button action');
+  if (input.type === 'openUrl') {
+    const url = safeUrl(input.url);
+    if (!url) throw new Error('openUrl action requires an http(s) url');
+    return { type: 'openUrl', url };
+  }
+  const queue = String(input.queue || '').trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9_-]{0,47}$/.test(queue)) throw new Error('ticket action requires a valid queue');
+  const prefix = String(input.prefix || 'A').trim().toUpperCase();
+  if (!/^[A-Z0-9]{1,3}$/.test(prefix)) throw new Error('ticket action requires a valid prefix');
+  return { type: 'ticket', queue, prefix };
 }
 
 function sanitizeHtmlFragment(value) {
@@ -147,4 +173,4 @@ function validateToken(token) {
   if (!/^[a-zA-Z0-9_-]{12,128}$/.test(String(token || ''))) throw new Error('invalid player token');
 }
 
-module.exports = { SceneStore, normalizeScene, sanitizeHtmlFragment, safeUrl };
+module.exports = { SceneStore, normalizeScene, normalizeAction, sanitizeHtmlFragment, safeUrl };
