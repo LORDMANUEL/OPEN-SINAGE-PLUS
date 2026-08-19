@@ -29,7 +29,15 @@ async function mockAi(page: Page) {
 }
 
 test.describe('Open Signage Plus V2', () => {
-  test('admin can log in and navigate to local screen inventory', async ({ page }) => { await login(page); await page.getByRole('button', { name: 'Pantallas' }).click(); const main = page.getByRole('main'); await expect(main.getByRole('heading', { name: 'Pantallas Digital Signage' })).toBeVisible(); await main.getByRole('button', { name: /Nueva pantalla/i }).click(); await expect(main.getByText(/Nueva Digital Signage 3/)).toBeVisible(); });
+  test('admin can log in and navigate to the live Xibo screen inventory', async ({ page }) => {
+    await mockXibo(page);
+    await login(page);
+    await page.getByRole('button', { name: 'Pantallas' }).click();
+    const main = page.getByRole('main');
+    await expect(main.getByRole('heading', { name: 'Pantallas Xibo' })).toBeVisible();
+    await expect(main.getByText('Lobby Principal')).toBeVisible();
+    await expect(main.getByRole('button', { name: /Nueva pantalla/i })).toHaveCount(0);
+  });
 
   test('Motor Xibo loads catalog and creates a schedule', async ({ page }) => { await mockXibo(page); await login(page); await page.getByRole('button', { name: 'Motor Xibo' }).click(); const main = page.getByRole('main'); await expect(main.getByRole('heading', { name: 'Motor Xibo' })).toBeVisible(); await expect(main.getByText('OAuth2 conectado')).toBeVisible(); await expect(main.getByText('Lobby Principal')).toBeVisible(); await main.getByRole('button', { name: /Programación/ }).click(); await main.getByLabel('Nombre del evento').fill('Campaña E2E'); await main.getByLabel('Layout').selectOption('21'); await main.getByLabel('Grupo de pantallas').selectOption('51'); await main.getByRole('button', { name: 'Crear programación' }).click(); await expect(main.getByText(/Programación creada en Xibo/)).toBeVisible(); });
 
