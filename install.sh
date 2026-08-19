@@ -13,16 +13,12 @@ for arg in "$@"; do
     --with-ai) WITH_AI=1 ;;
     --ai-model=*) AI_MODEL="${arg#*=}" ;;
     --admin-email=*) ADMIN_EMAIL_VALUE="${arg#*=}" ;;
-    --help|-h)
-      echo "Uso: ./install.sh [--with-ai] [--ai-model=qwen2.5:1.5b] [--admin-email=admin@empresa.com]"
-      exit 0
-      ;;
+    --help|-h) echo "Uso: ./install.sh [--with-ai] [--ai-model=qwen2.5:1.5b] [--admin-email=admin@empresa.com]"; exit 0 ;;
     *) echo "ERROR: argumento desconocido: $arg" >&2; exit 2 ;;
   esac
 done
 
 echo "Open Signage Plus V2 — instalador"
-
 if ! command -v docker >/dev/null 2>&1; then echo "ERROR: Docker no está instalado o no está en PATH." >&2; exit 1; fi
 if ! docker compose version >/dev/null 2>&1; then echo "ERROR: Docker Compose v2 no está disponible (se requiere 'docker compose')." >&2; exit 1; fi
 if [[ ! -f "$COMPOSE_FILE" ]]; then echo "ERROR: no se encontró $COMPOSE_FILE. Ejecute este script desde la raíz del repositorio." >&2; exit 1; fi
@@ -30,12 +26,12 @@ if [[ ! -f "$COMPOSE_FILE" ]]; then echo "ERROR: no se encontró $COMPOSE_FILE. 
 if [[ ! -f "$ENV_FILE" ]]; then
   if command -v openssl >/dev/null 2>&1; then
     MYSQL_PASSWORD="$(openssl rand -hex 10)"
-    NEW_ADMIN_PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
+    NEW_ADMIN_PASSWORD="$(openssl rand -hex 12)"
     SESSION_SECRET="$(openssl rand -hex 32)"
   else
     RANDOM_SEED="$(printf '%s' "$(date +%s%N)-${RANDOM}-${RANDOM}-$$" | sha256sum | awk '{print $1}')"
     MYSQL_PASSWORD="${RANDOM_SEED:0:20}"
-    NEW_ADMIN_PASSWORD="${RANDOM_SEED:20:20}"
+    NEW_ADMIN_PASSWORD="${RANDOM_SEED:20:24}"
     SESSION_SECRET="$(printf '%s' "session-${RANDOM_SEED}-${RANDOM}" | sha256sum | awk '{print $1}')"
   fi
   if [[ "$WITH_AI" -eq 1 ]]; then AI_PROVIDER_VALUE="ollama"; AI_BASE_URL_VALUE="http://ollama:11434"; AI_MODEL_VALUE="$AI_MODEL"; else AI_PROVIDER_VALUE=""; AI_BASE_URL_VALUE=""; AI_MODEL_VALUE=""; fi
@@ -105,4 +101,4 @@ echo "3. Cree una aplicación OAuth client_credentials en Xibo."
 echo "4. Coloque XIBO_CLIENT_ID y XIBO_CLIENT_SECRET en .env."
 echo "5. Ejecute: docker compose --env-file .env -f $COMPOSE_FILE up -d open-signage-api"
 echo "6. Entre en Open Signage Plus > Motor Xibo > Verificar conexión."
-if [[ "$WITH_AI" -eq 0 ]]; then echo "7. IA opcional: configure un endpoint compatible o instale con perfil Ollama en una instalación nueva usando --with-ai."; fi
+if [[ "$WITH_AI" -eq 0 ]]; then echo "7. IA opcional: configure un endpoint compatible o use --with-ai en una instalación nueva."; fi
