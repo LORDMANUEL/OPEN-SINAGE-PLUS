@@ -10,18 +10,21 @@ import IntegrationView from './views/IntegrationView';
 import StudioView from './views/StudioView';
 import MediaView from './views/MediaView';
 import PlayerScreen from './views/PlayerScreen';
+import AiStudioView from './views/AiStudioView';
+import QueueView from './views/QueueView';
 
 function App() {
   const { isLoggedIn } = useAppContext();
   const [currentView, setCurrentView] = useState('dashboard');
-
   if (!isLoggedIn) return <LoginScreen />;
 
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard': return <DashboardView />;
       case 'studio': return <StudioView />;
+      case 'ai': return <AiStudioView />;
       case 'media': return <MediaView />;
+      case 'queues': return <QueueView />;
       case 'signage': return <ScreenListView type="signage" title="Pantallas Digital Signage" />;
       case 'kiosk': return <ScreenListView type="kiosk" title="Kioscos Interactivos" />;
       case 'dashboards': return <ScreenListView type="dashboard" title="Dashboards BI" />;
@@ -31,15 +34,7 @@ function App() {
     }
   };
 
-  return (
-    <div className="app-shell">
-      <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
-      <div className="app-content">
-        <TopBar currentView={currentView} />
-        <main className="app-main">{renderContent()}</main>
-      </div>
-    </div>
-  );
+  return <div className="app-shell"><Sidebar currentView={currentView} setCurrentView={setCurrentView} /><div className="app-content"><TopBar currentView={currentView} /><main className="app-main">{renderContent()}</main></div></div>;
 }
 
 function getPlayerTokenFromPath() {
