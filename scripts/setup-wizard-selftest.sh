@@ -26,7 +26,7 @@ SMTP_FROM=
 ALERT_EMAIL_TO=
 ENV
 
-ENV_FILE="$env_file" ./scripts/setup-wizard.sh \
+ENV_FILE="$env_file" bash ./scripts/setup-wizard.sh \
   --configure-only --no-start --non-interactive \
   --domain=signage.example.com \
   --admin-email=admin@example.com \
@@ -54,7 +54,7 @@ grep -qx 'ALERT_EMAIL_TO=ops@example.com' "$env_file"
 
 # Re-running the wizard with unrelated changes must never blank existing
 # Xibo/SMTP credentials. AI is explicitly disabled here and therefore cleared.
-ENV_FILE="$env_file" ./scripts/setup-wizard.sh \
+ENV_FILE="$env_file" bash ./scripts/setup-wizard.sh \
   --configure-only --no-start --non-interactive --no-tls \
   --domain=lan.local --admin-email=admin@example.com --ai-provider=none
 

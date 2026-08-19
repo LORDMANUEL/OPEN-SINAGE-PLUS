@@ -134,7 +134,7 @@ services:
       open-signage-api:
         condition: service_healthy
     ports:
-      - "${WEB_BIND:-0.0.0.0}:8080:80"
+      - "${WEB_BIND:-0.0.0.0}:8080:8080"
     restart: unless-stopped
 
 networks:
