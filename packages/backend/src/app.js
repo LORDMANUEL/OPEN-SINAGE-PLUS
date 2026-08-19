@@ -9,12 +9,12 @@ const DEFAULT_RATE_LIMITS = Object.freeze({
   qr: { limit: 120, windowMs: 60_000 },
 });
 
-function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore = null, qrService = null, deviceStore = null, authService = null, rateLimitOptions = {} }) {
+function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore = null, qrService = null, deviceStore = null, authService = null, rateLimitOptions = {}, corsOrigins = undefined }) {
   if (!xiboClient) throw new Error('xiboClient is required');
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 1);
-  app.use(cors({ origin: true, credentials: false }));
+  app.set('trust proxy', process.env.TRUST_PROXY || 'loopback, linklocal, uniquelocal');
+  app.use(cors(createCorsOptions(corsOrigins)));
   app.use(express.json({ limit: '1mb' }));
 
   const limits = {
@@ -113,7 +113,7 @@ function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore
   app.get('/api/qr', limits.qr, async (req, res) => {
     if (!qrService) return res.status(503).json({ error: 'QR_UNAVAILABLE' });
     const value = String(req.query.value || '').trim();
-    if (!value) return res.status(400).json({ error: 'INVALID_QR', message: 'value is required' });
+    if (!value || value.length > 2000) return res.status(400).json({ error: 'INVALID_QR', message: 'value is required and must be at most 2000 characters' });
     try {
       const rendered = await qrService.render(value);
       res.set('Content-Type', rendered.contentType);
@@ -208,6 +208,19 @@ function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore
   return app;
 }
 
+function createCorsOptions(explicitOrigins) {
+  const source = explicitOrigins === undefined ? process.env.CORS_ORIGINS || '' : explicitOrigins;
+  const origins = Array.isArray(source) ? source : String(source).split(',');
+  const allowed = new Set(origins.map(value => String(value).trim()).filter(Boolean));
+  return {
+    credentials: false,
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      return callback(null, allowed.has(origin));
+    },
+  };
+}
+
 function createRateLimiter({ limit, windowMs }) {
   const max = Math.max(1, Number(limit || 1));
   const duration = Math.max(1000, Number(windowMs || 60_000));
@@ -241,7 +254,6 @@ function requestClientKey(req) {
   const ip = String(req.ip || req.socket?.remoteAddress || 'unknown').trim();
   return ip.slice(0, 128);
 }
-
 function isHttpUrl(value) {
   if (!value || typeof value !== 'string') return false;
   try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
@@ -277,4 +289,4 @@ function sanitizeError(error) {
   const message = error instanceof Error ? error.message : 'Unknown integration error';
   return message.replace(/(client_secret|access_token)=([^&\s]+)/gi, '$1=[redacted]').replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]');
 }
-module.exports = { createApp, sanitizeError, cleanHeader, MAX_MEDIA_BYTES, requireAuth, isPublicApiRequest, isHttpUrl, createRateLimiter, requestClientKey };
+module.exports = { createApp, sanitizeError, cleanHeader, MAX_MEDIA_BYTES, requireAuth, isPublicApiRequest, isHttpUrl, createRateLimiter, requestClientKey, createCorsOptions };
