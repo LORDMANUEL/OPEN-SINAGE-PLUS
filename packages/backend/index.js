@@ -10,6 +10,7 @@ const { QueueStore } = require('./src/queue-store');
 const { DeviceStore } = require('./src/device-store');
 const { PlatformStore } = require('./src/platform-store');
 const { MediaCatalog } = require('./src/media-catalog');
+const { AnalyticsStore } = require('./src/analytics-store');
 const { createAiServiceFromEnv } = require('./src/ai-service');
 const { createAuthServiceFromEnv } = require('./src/auth-service');
 const { QrService } = require('./src/qr-service');
@@ -20,6 +21,7 @@ async function start() {
   const platformStore = new PlatformStore({ dataDir });
   await platformStore.initialize({ adminEmail: process.env.ADMIN_EMAIL, adminPassword: process.env.ADMIN_PASSWORD });
   const mediaCatalog = new MediaCatalog({ dataDir });
+  const analyticsStore = new AnalyticsStore({ dataDir });
   const authService = createAuthServiceFromEnv(process.env, platformStore);
   const xiboClient = createXiboIntegrationFromEnv(process.env);
   const deviceStore = new DeviceStore({ dataDir });
@@ -27,12 +29,23 @@ async function start() {
   const aiService = createAiServiceFromEnv(process.env);
   const qrService = new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) });
   const publicTicketLimit = createRateLimiter({ limit: 60, windowMs: 60_000 });
+  const telemetryLimit = createRateLimiter({ limit: 240, windowMs: 60_000 });
   const baseApp = createApp({ xiboClient, sceneStore: new SceneStore({ dataDir }), queueStore, deviceStore, aiService, authService, qrService });
 
   const app = express();
   app.disable('x-powered-by');
   app.use('/api/platform', express.json({ limit: '1mb' }), requireAuth(authService), createPlatformRouter({ platformStore }));
   app.use('/api/ai', requireAuth(authService), createAiRouter({ aiService, platformStore }));
+
+  app.post('/api/player/proof', telemetryLimit, express.json({ limit: '64kb' }), (req, res) => {
+    try { return res.status(201).json({ event: analyticsStore.recordPlayback(req.body || {}) }); }
+    catch (error) { return res.status(400).json({ error: 'INVALID_PROOF', message: String(error.message || 'invalid proof').slice(0, 200) }); }
+  });
+  app.post('/api/player/interaction', telemetryLimit, express.json({ limit: '64kb' }), (req, res) => {
+    try { return res.status(201).json({ event: analyticsStore.recordInteraction(req.body || {}) }); }
+    catch (error) { return res.status(400).json({ error: 'INVALID_INTERACTION', message: String(error.message || 'invalid interaction').slice(0, 200) }); }
+  });
+  app.get('/api/platform/analytics/summary', requireAuth(authService), (req, res) => res.json(analyticsStore.summary({ sinceHours: req.query.hours })));
 
   app.post('/api/xibo/library/upload', requireAuth(authService), express.raw({ type: () => true, limit: 200 * 1024 * 1024 }), async (req, res) => {
     try {
@@ -86,7 +99,7 @@ async function start() {
     let xibo = { ok: false, error: 'unavailable' };
     try { await xiboClient.authenticate(); xibo = { ok: true }; } catch (error) { xibo = { ok: false, error: String(error.message || 'xibo unavailable').slice(0, 200) }; }
     const stats = fs.statfsSync(dataDir);
-    return res.json({ status: 'ok', checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, node: process.version, uptimeSeconds: Math.round(process.uptime()), hostname: os.hostname(), memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed, freeSystem: os.freemem(), totalSystem: os.totalmem() }, storage: { freeBytes: Number(stats.bavail) * Number(stats.bsize), totalBytes: Number(stats.blocks) * Number(stats.bsize) }, xibo, ai: aiService ? aiService.diagnostics() : { configured: false }, fleet: await deviceStore.fleetHealth() });
+    return res.json({ status: 'ok', checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, node: process.version, uptimeSeconds: Math.round(process.uptime()), hostname: os.hostname(), memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed, freeSystem: os.freemem(), totalSystem: os.totalmem() }, storage: { freeBytes: Number(stats.bavail) * Number(stats.bsize), totalBytes: Number(stats.blocks) * Number(stats.bsize) }, xibo, ai: aiService ? aiService.diagnostics() : { configured: false }, fleet: await deviceStore.fleetHealth(), analytics: analyticsStore.summary({ sinceHours: 24 }) });
   });
 
   app.get('/q/:slug', (req, res) => {
@@ -102,7 +115,7 @@ async function start() {
   app.use(baseApp);
 
   const server = app.listen(port, () => console.log(`Open Signage API listening on http://localhost:${port}`));
-  const shutdown = () => server.close(() => { mediaCatalog.close(); platformStore.close(); process.exit(0); });
+  const shutdown = () => server.close(() => { analyticsStore.close(); mediaCatalog.close(); platformStore.close(); process.exit(0); });
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 }
