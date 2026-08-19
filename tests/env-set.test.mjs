@@ -18,6 +18,18 @@ test('sets, replaces and preserves unrelated env keys', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('round-trips shell-sensitive secret values as literal dotenv data', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'osp-env-secret-'));
+  const file = path.join(dir, '.env');
+  const secret = "pa ss;$HOME$(touch /tmp/never-run)'quote";
+  setEnvValue(file, 'SMTP_PASSWORD', secret);
+  assert.equal(readEnvValue(file, 'SMTP_PASSWORD'), secret);
+  const raw = fs.readFileSync(file, 'utf8');
+  assert.match(raw, /^SMTP_PASSWORD='/m);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('rejects unsafe keys and line breaks', () => {
   const file = path.join(os.tmpdir(), `osp-env-${Date.now()}`);
   fs.writeFileSync(file, 'A=1\n');
