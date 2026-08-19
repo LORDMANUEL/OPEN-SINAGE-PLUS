@@ -15,7 +15,7 @@ test('Studio applies a template, adapts to vertical and edits timeline animation
   await page.getByRole('button', { name: 'Studio', exact: true }).click();
   const main = page.getByRole('main');
   await main.getByRole('button', { name: 'Plantilla Retail' }).click();
-  await expect(main.getByText('OFERTA ESPECIAL')).toBeVisible();
+  await expect(main.getByTestId('visual-scene-canvas').getByText('OFERTA ESPECIAL')).toBeVisible();
   await main.getByRole('button', { name: '9:16 Vertical' }).click();
   await expect(main.getByTestId('visual-scene-canvas')).toHaveAttribute('data-format', '9:16');
   await main.getByLabel('Animación').selectOption('fade');
