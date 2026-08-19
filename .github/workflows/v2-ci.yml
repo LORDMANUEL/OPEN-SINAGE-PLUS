@@ -37,6 +37,17 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate installer shell syntax
+        run: bash -n install.sh
+      - name: Validate Docker Compose V2 stack
+        run: |
+          cp .env.example .env.ci
+          docker compose --env-file .env.ci -f docker-compose.v2.yml config >/dev/null
+
   e2e:
     runs-on: ubuntu-latest
     steps:
