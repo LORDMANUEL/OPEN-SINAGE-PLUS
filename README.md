@@ -1,86 +1,156 @@
-# Digital Signage Enterprise System
+# Open Signage Plus
 
-Este repositorio contiene el código fuente para el Sistema de Señalización Digital Empresarial, una aplicación full-stack para gestionar pantallas digitales, quioscos y paneles de control.
+Open Signage Plus es una capa moderna de administración, automatización y reproducción web construida sobre **Xibo CMS** como motor principal de digital signage.
 
-## Arquitectura
+La meta del proyecto es conservar las capacidades maduras de Xibo —biblioteca, layouts, playlists, displays y scheduling— y ofrecer encima una experiencia propia mucho más simple: PWA, publicación guiada, IA, QR/tickets, kioscos táctiles y un player opcional que funciona directamente en navegador.
 
-El sistema está diseñado con una arquitectura de microservicios y se compone de los siguientes componentes:
+## Arquitectura V2
 
-- **Frontend:** Una aplicación de una sola página (SPA) construida con React y Vite que sirve como panel de administración para gestionar el contenido y las pantallas.
-- **Backend:** Una API REST construida con Node.js y Express que gestiona la lógica de negocio y se comunica con la base de datos.
-- **Reproductor:** Una aplicación de escritorio construida con Electron que muestra el contenido en las pantallas de señalización digital.
-
-## Capturas de Pantalla
-
-*Nota: Las siguientes imágenes son marcadores de posición. No se pudieron generar capturas de pantalla reales debido a un error persistente del servidor de desarrollo de Vite en el entorno de prueba.*
-
-**Pantalla de Inicio de Sesión**
-![Pantalla de Inicio de Sesión](https://via.placeholder.com/800x600.png?text=Pantalla+de+Inicio+de+Sesión)
-
-**Dashboard Principal**
-![Dashboard Principal](https://via.placeholder.com/800x600.png?text=Dashboard+Principal)
-
-## Instalación y Ejecución
-
-Siga estas instrucciones para configurar y ejecutar el sistema en su entorno local.
-
-### Prerrequisitos
-
-- Node.js (v16 o superior)
-- npm (v8 o superior)
-
-### 1. Clonar el Repositorio
-
-```bash
-git clone <URL_DEL_REPOSITORIO>
-cd <NOMBRE_DEL_REPOSITORIO>
+```text
+Open Signage Plus PWA
+        |
+        v
+Open Signage API
+   |          |
+   |          +--> PLUS Web Player scenes
+   |
+   +--> OAuth2 --> Xibo CMS API
+                    |
+                    +--> Media
+                    +--> Layouts
+                    +--> Playlists
+                    +--> Displays / Groups
+                    +--> Scheduling
 ```
 
-### 2. Instalar Dependencias
+**Xibo es el motor; Open Signage Plus es el producto y la experiencia de usuario.** Las credenciales de Xibo permanecen en el backend y nunca se exponen al navegador.
 
-Instale las dependencias para el proyecto raíz, el backend y el reproductor.
+## Estado funcional actual
+
+- Login y panel PWA responsive.
+- Centro `Motor Xibo` con estado OAuth y lectura de displays, layouts, media, playlists, display groups y schedule.
+- Creación de programación y publicación de layouts mediante Open Signage API.
+- Biblioteca `Media` con subida binaria hacia Xibo.
+- `Studio` guiado para crear layouts draft en Xibo.
+- `Studio` para crear escenas del PLUS Web Player.
+- Player público `/player/<token>` para navegador sin login administrativo.
+- Player con texto, imagen, video y HTML en iframe sandboxed.
+- Cache local de la última escena válida para seguir mostrando contenido si se pierde la conexión.
+- Persistencia de escenas en volumen Docker.
+- PWA con manifest y service worker.
+- CI con lint, build, tests backend y Playwright/Chromium.
+
+## Instalación recomendada con Docker
+
+### Requisitos
+
+- Linux con Docker Engine y Docker Compose v2.
+- Puertos 8080 para Open Signage Plus, 8081 para administración Xibo durante configuración y 9505 para XMR si se utiliza externamente.
+- DNS/TLS mediante reverse proxy en producción.
+
+### 1. Preparar configuración
 
 ```bash
-npm install
-cd packages/backend && npm install && cd ../..
-cd packages/player && npm install && cd ../..
+cp .env.example .env
 ```
 
-### 3. Ejecutar los Servidores
+Defina al menos una contraseña fuerte para MySQL. Xibo puede iniciar sin que Open Signage tenga aún un OAuth client configurado; en ese estado la PWA mostrará `Xibo no configurado` en lugar de derribar el API.
 
-Necesitará ejecutar tanto el servidor de desarrollo del frontend como el servidor del backend.
-
-**Iniciar el Backend (API)**
+### 2. Levantar el stack
 
 ```bash
-cd packages/backend
-npm start
+docker compose -f docker-compose.v2.yml up -d --build
 ```
 
-El servidor de la API se ejecutará en `http://localhost:3000`.
+Servicios principales:
 
-**Iniciar el Frontend (Panel de Administración)**
+- Open Signage Plus: `http://SERVIDOR:8080`
+- Xibo CMS de administración: `http://SERVIDOR:8081`
 
-En una nueva terminal:
+### 3. Crear el cliente API en Xibo
+
+En Xibo cree una aplicación OAuth de tipo `client_credentials`. Copie el `client_id` y `client_secret` al `.env`:
+
+```env
+XIBO_CLIENT_ID=...
+XIBO_CLIENT_SECRET=...
+```
+
+Reinicie únicamente el gateway:
 
 ```bash
+docker compose -f docker-compose.v2.yml up -d open-signage-api
+```
+
+Luego entre a **Motor Xibo** y use `Verificar conexión`.
+
+## Flujo de contenido
+
+### Ruta Xibo
+
+```text
+Media -> subir archivo -> Xibo Library
+Studio -> crear layout draft -> Xibo Layout
+Motor Xibo -> publicar -> programar -> displays Xibo
+```
+
+### Ruta browser-only
+
+```text
+Studio -> crear escena -> Publicar Web Player
+       -> /player/<token>
+       -> abrir URL en TV / PC / tablet / panel táctil
+```
+
+El PLUS Web Player es actualmente un canal complementario. No pretende reemplazar todavía XMDS/XLF completo ni los players Xibo oficiales.
+
+## Desarrollo
+
+Frontend:
+
+```bash
+npm ci
 npm run dev
 ```
 
-El panel de administración estará disponible en `http://localhost:5173`.
-
-### 4. Ejecutar el Reproductor de Electron
-
-Para ejecutar la aplicación de escritorio del reproductor en modo de desarrollo:
+Backend:
 
 ```bash
-cd packages/player
+cd packages/backend
+npm ci
+npm test
 npm start
 ```
 
-## Scripts Útiles
+Verificación completa:
 
-- `npm run dev`: Inicia el servidor de desarrollo del frontend.
-- `npm start` (en `packages/backend`): Inicia el servidor de la API del backend.
-- `npm start` (en `packages/player`): Inicia la aplicación del reproductor de Electron.
-- `npm run dist` (en `packages/player`): Empaqueta la aplicación del reproductor para distribución.
+```bash
+npm run lint
+npm run build
+cd packages/backend && npm test
+```
+
+Los flujos de navegador se validan con Playwright en GitHub Actions.
+
+## Seguridad
+
+- Secrets OAuth solo en backend.
+- `X-Powered-By` deshabilitado en Express.
+- Timeouts para llamadas Xibo.
+- Redacción de tokens/secrets en errores.
+- Upload limitado a 200 MiB por solicitud.
+- Tokens aleatorios para Web Player.
+- Media remota del Web Player limitada a HTTP(S).
+- HTML del Web Player se renderiza en `iframe sandbox` sin permisos y se limpia antes de persistir.
+- Los archivos de escena se escriben de forma atómica en el volumen de datos.
+
+## Documentación
+
+- `docs/architecture/2026-08-18-open-signage-plus-v2-xibo.md`
+- `docs/plans/2026-08-18-open-signage-plus-v2-implementation.md`
+- `docs/DEPLOYMENT-V2.md`
+- `docs/PLAYER-WEB-V2.md`
+
+## Licencias
+
+Open Signage Plus mantiene su código separado del CMS Xibo y se comunica con él mediante API. Revise siempre las licencias de Xibo y de los componentes de terceros antes de redistribuir una instalación comercial.
