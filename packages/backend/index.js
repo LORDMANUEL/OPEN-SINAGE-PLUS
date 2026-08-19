@@ -1,4 +1,6 @@
 const express = require('express');
+const os = require('node:os');
+const fs = require('node:fs');
 const { createApp, requireAuth } = require('./src/app');
 const { createPlatformRouter } = require('./src/platform-routes');
 const { createXiboIntegrationFromEnv } = require('./src/xibo-integration');
@@ -16,19 +18,46 @@ async function start() {
   const platformStore = new PlatformStore({ dataDir });
   await platformStore.initialize({ adminEmail: process.env.ADMIN_EMAIL, adminPassword: process.env.ADMIN_PASSWORD });
   const authService = createAuthServiceFromEnv(process.env, platformStore);
+  const xiboClient = createXiboIntegrationFromEnv(process.env);
+  const deviceStore = new DeviceStore({ dataDir });
+  const aiService = createAiServiceFromEnv(process.env);
+  const qrService = new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) });
   const baseApp = createApp({
-    xiboClient: createXiboIntegrationFromEnv(process.env),
+    xiboClient,
     sceneStore: new SceneStore({ dataDir }),
     queueStore: new QueueStore({ dataDir }),
-    deviceStore: new DeviceStore({ dataDir }),
-    aiService: createAiServiceFromEnv(process.env),
+    deviceStore,
+    aiService,
     authService,
-    qrService: new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) }),
+    qrService,
   });
 
   const app = express();
   app.disable('x-powered-by');
   app.use('/api/platform', express.json({ limit: '1mb' }), requireAuth(authService), createPlatformRouter({ platformStore }));
+
+  app.post('/api/player/devices/:deviceToken/heartbeat', express.json({ limit: '64kb' }), async (req, res) => {
+    try {
+      const device = await deviceStore.heartbeat(req.params.deviceToken, req.body || {});
+      return device ? res.json({ device }) : res.status(404).json({ error: 'DEVICE_NOT_FOUND' });
+    } catch (error) { return res.status(400).json({ error: 'INVALID_HEARTBEAT', message: error.message }); }
+  });
+
+  app.get('/api/platform/fleet/health', requireAuth(authService), async (_req, res) => res.json(await deviceStore.fleetHealth()));
+  app.get('/api/platform/system/health', requireAuth(authService), async (_req, res) => {
+    const started = Date.now();
+    let xibo = { ok: false, error: 'unavailable' };
+    try { await xiboClient.authenticate(); xibo = { ok: true }; } catch (error) { xibo = { ok: false, error: String(error.message || 'xibo unavailable').slice(0, 200) }; }
+    const stats = fs.statfsSync(dataDir);
+    return res.json({
+      status: 'ok', checkedAt: new Date().toISOString(), latencyMs: Date.now() - started,
+      node: process.version, uptimeSeconds: Math.round(process.uptime()), hostname: os.hostname(),
+      memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed, freeSystem: os.freemem(), totalSystem: os.totalmem() },
+      storage: { freeBytes: Number(stats.bavail) * Number(stats.bsize), totalBytes: Number(stats.blocks) * Number(stats.bsize) },
+      xibo, ai: aiService ? aiService.status() : { configured: false }, fleet: await deviceStore.fleetHealth(),
+    });
+  });
+
   app.get('/q/:slug', (req, res) => {
     const qr = platformStore.resolveDynamicQr(req.params.slug);
     if (!qr) return res.status(404).send('QR not found');
