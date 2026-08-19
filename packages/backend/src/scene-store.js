@@ -5,6 +5,8 @@ const { withFileLock } = require('./file-lock');
 
 const ALLOWED_TYPES = new Set(['text', 'image', 'video', 'html', 'button', 'qr']);
 const ALLOWED_ACTIONS = new Set(['openUrl', 'ticket']);
+const ALLOWED_FORMATS = new Set(['16:9', '9:16']);
+const ALLOWED_ANIMATIONS = new Set(['none', 'fade', 'slide', 'zoom']);
 
 class SceneStore {
   constructor({ dataDir = process.env.OPEN_SIGNAGE_DATA_DIR || '/data' } = {}) {
@@ -67,13 +69,17 @@ function normalizeScene(input) {
   if (!name) throw new Error('scene name is required');
   const duration = Math.max(1, Math.min(86400, Number(input.duration || 15)));
   const background = cleanText(input.background || '#050b18', 100) || '#050b18';
-  const items = Array.isArray(input.items) ? input.items.map(normalizeItem) : [];
-  return { name, duration, background, items };
+  const format = ALLOWED_FORMATS.has(input.format) ? input.format : '16:9';
+  const items = Array.isArray(input.items) ? input.items.map((item, index) => normalizeItem(item, index, duration)) : [];
+  return { name, duration, background, format, items };
 }
 
-function normalizeItem(item, index) {
+function normalizeItem(item, index, sceneDuration = 15) {
   if (!item || typeof item !== 'object') throw new Error(`scene item ${index} is invalid`);
   if (!ALLOWED_TYPES.has(item.type)) throw new Error(`unsupported scene item type: ${String(item.type)}`);
+  const startAt = clampTime(item.startAt, 0, sceneDuration);
+  let endAt = clampTime(item.endAt, sceneDuration, sceneDuration);
+  if (endAt < startAt) endAt = startAt;
   const normalized = {
     id: cleanText(item.id, 80) || `item-${index + 1}`,
     type: item.type,
@@ -82,6 +88,9 @@ function normalizeItem(item, index) {
     width: clampPercent(item.width, item.type === 'button' ? 30 : item.type === 'qr' ? 20 : 100),
     height: clampPercent(item.height, item.type === 'button' ? 10 : item.type === 'qr' ? 20 : 100),
     zIndex: Math.max(0, Math.min(1000, Number(item.zIndex || index))),
+    animation: ALLOWED_ANIMATIONS.has(item.animation) ? item.animation : 'none',
+    startAt,
+    endAt,
   };
   if (item.type === 'text') {
     normalized.text = cleanText(item.text, 5000) || '';
@@ -141,6 +150,7 @@ function safeUrl(value) {
   catch { return ''; }
 }
 function clampPercent(value, fallback) { const number = Number(value); return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : fallback; }
+function clampTime(value, fallback, duration) { const number = Number(value); return Number.isFinite(number) ? Math.max(0, Math.min(duration, number)) : fallback; }
 function cleanText(value, limit) { return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, limit); }
 function validateToken(token) { if (!/^[a-zA-Z0-9_-]{12,128}$/.test(String(token || ''))) throw new Error('invalid player token'); }
 
