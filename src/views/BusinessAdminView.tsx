@@ -75,7 +75,12 @@ function FormsPanel() {
     try { const form = await adminPlatformApi.createForm(name, { fields, submitLabel: 'Enviar', successMessage: '¡Gracias! Tu información fue recibida.' }); setMessage(`Formulario ${form.name} creado.`); await refresh(); }
     catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo crear formulario'); }
   }
-  async function loadResponses(formId: string) { try { setResponses(current => ({ ...current, [formId]: await adminPlatformApi.formResponses(formId) })); } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudieron leer respuestas'); } }
+  async function loadResponses(formId: string) {
+    try {
+      const rows = await adminPlatformApi.formResponses(formId);
+      setResponses(current => ({ ...current, [formId]: rows }));
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudieron leer respuestas'); }
+  }
   async function copyUrl(formId: string) { await navigator.clipboard?.writeText(adminPlatformApi.publicFormUrl(formId)); setMessage('URL pública copiada.'); }
 
   return <div className="studio-grid">
