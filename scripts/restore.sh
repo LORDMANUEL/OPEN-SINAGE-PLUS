@@ -38,25 +38,33 @@ tar --no-same-owner --no-same-permissions -C "$work" -xzf "$archive"
 cp "$ENV_FILE" "$ENV_FILE.pre-restore.$(date -u +%Y%m%dT%H%M%SZ)" 2>/dev/null || true
 cp "$work/env" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
-set -a; . "$ENV_FILE"; set +a
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-$(node scripts/env-read.mjs "$ENV_FILE" MYSQL_PASSWORD)}"
+[[ -n "$MYSQL_PASSWORD" ]] || { echo 'ERROR: restored env has no MYSQL_PASSWORD' >&2; exit 2; }
 
 mkdir -p "$SHARED_ROOT/open-signage" "$SHARED_ROOT/cms/library" "$SHARED_ROOT/cms/custom"
 if [[ -f "$work/open-signage.tar" ]]; then rm -rf "$SHARED_ROOT/open-signage"; tar --no-same-owner --no-same-permissions -C "$SHARED_ROOT" -xf "$work/open-signage.tar"; fi
 if [[ -f "$work/xibo-library.tar" ]]; then rm -rf "$SHARED_ROOT/cms/library"; mkdir -p "$SHARED_ROOT/cms"; tar --no-same-owner --no-same-permissions -C "$SHARED_ROOT/cms" -xf "$work/xibo-library.tar"; fi
 if [[ -f "$work/xibo-custom.tar" ]]; then rm -rf "$SHARED_ROOT/cms/custom"; mkdir -p "$SHARED_ROOT/cms"; tar --no-same-owner --no-same-permissions -C "$SHARED_ROOT/cms" -xf "$work/xibo-custom.tar"; fi
 
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d cms-db
+# RESTORE_RUNNER is injected by lifecycle-selftest; production defaults to Docker Compose.
+run_compose() {
+  if [[ -n "${RESTORE_RUNNER:-}" ]]; then "$RESTORE_RUNNER" "$@"; else docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; fi
+}
+
+run_compose up -d cms-db
 ready=0
 for _ in $(seq 1 60); do
-  if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T cms-db mysqladmin ping -ucms -p"${MYSQL_PASSWORD}" --silent >/dev/null 2>&1; then ready=1; break; fi
+  if run_compose exec -T cms-db mysqladmin ping -ucms -p"${MYSQL_PASSWORD}" --silent >/dev/null 2>&1; then ready=1; break; fi
   sleep 2
 done
 [[ "$ready" -eq 1 ]] || { echo 'ERROR: cms-db did not become ready' >&2; exit 3; }
-[[ -f "$work/xibo-cms.sql" ]] && docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T cms-db mysql -ucms -p"${MYSQL_PASSWORD}" cms < "$work/xibo-cms.sql"
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+[[ -f "$work/xibo-cms.sql" ]] && run_compose exec -T cms-db mysql -ucms -p"${MYSQL_PASSWORD}" cms < "$work/xibo-cms.sql"
+run_compose up -d --build
 
 for _ in $(seq 1 60); do
-  if curl --fail --silent --max-time 3 "$HEALTH_URL" | grep -q '"status":"ok"'; then
+  if [[ -n "${RESTORE_HEALTH_COMMAND:-}" ]]; then
+    if bash -c "$RESTORE_HEALTH_COMMAND"; then printf 'Restore completed and health verified from %s\n' "$archive"; exit 0; fi
+  elif curl --fail --silent --max-time 3 "$HEALTH_URL" | grep -q '"status":"ok"'; then
     printf 'Restore completed and health verified from %s\n' "$archive"
     exit 0
   fi
