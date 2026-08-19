@@ -29,6 +29,13 @@ class DeviceStore {
     return device;
   }
 
+  async list() {
+    const state = await this.#load();
+    return Object.values(state)
+      .filter(device => device && typeof device === 'object')
+      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  }
+
   async get(deviceToken) {
     const token = validateDeviceToken(deviceToken);
     const state = await this.#load();
