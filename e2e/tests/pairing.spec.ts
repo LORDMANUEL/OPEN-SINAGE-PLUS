@@ -29,7 +29,7 @@ test('Studio pairs a published scene using the short TV code', async ({ page }) 
     return route.fulfill({ json: { device: { deviceToken: 'device-token-abcdefghijkl', pairingCode: 'AB12CD', sceneToken: 'demo-player-token', name: 'Lobby TV' } } });
   });
   await login(page);
-  await page.getByRole('button', { name: 'Studio' }).click();
+  await page.getByRole('button', { name: 'Studio', exact: true }).click();
   const main = page.getByRole('main');
   await main.getByRole('button', { name: 'Publicar Web Player' }).click();
   await main.getByLabel('Código de pantalla').fill('AB12CD');
