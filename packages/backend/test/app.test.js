@@ -25,6 +25,26 @@ const fakeXibo = {
   async publishLayout(layoutId) { return { layoutId, published: true }; },
 };
 
+function createFakeSceneStore() {
+  const scenes = new Map();
+  let counter = 0;
+  return {
+    async create(scene) {
+      const token = `scene-token-${++counter}`;
+      const saved = { ...scene, token };
+      scenes.set(token, saved);
+      return { token, scene: saved };
+    },
+    async update(token, scene) {
+      if (!scenes.has(token)) return null;
+      const saved = { ...scenes.get(token), ...scene, token };
+      scenes.set(token, saved);
+      return saved;
+    },
+    async get(token) { return scenes.get(token) || null; },
+  };
+}
+
 test('health route is independent from Xibo', async () => {
   await withServer(createApp({ xiboClient: fakeXibo }), async base => {
     const response = await fetch(`${base}/api/health`);
@@ -126,5 +146,29 @@ test('media upload route accepts raw binary without exposing Xibo credentials', 
     assert.equal(calls[0].payload.contentType, 'image/png');
     assert.equal(calls[0].payload.name, 'Promo Principal');
     assert.equal(calls[0].payload.bytes.length, 4);
+  });
+});
+
+test('browser player scenes can be created and fetched by token without login', async () => {
+  const sceneStore = createFakeSceneStore();
+  await withServer(createApp({ xiboClient: fakeXibo, sceneStore }), async base => {
+    const created = await fetch(`${base}/api/player/scenes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Lobby Demo',
+        duration: 15,
+        background: '#050b18',
+        items: [{ type: 'text', text: 'Bienvenido', x: 0, y: 0, width: 100, height: 100 }],
+      }),
+    });
+    assert.equal(created.status, 201);
+    const createdBody = await created.json();
+    assert.match(createdBody.token, /^scene-token-/);
+
+    const read = await fetch(`${base}/api/player/scenes/${createdBody.token}`);
+    assert.equal(read.status, 200);
+    const readBody = await read.json();
+    assert.equal(readBody.scene.name, 'Lobby Demo');
   });
 });
