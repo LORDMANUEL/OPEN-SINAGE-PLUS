@@ -37,3 +37,12 @@ test('rejects unsafe keys and line breaks', () => {
   assert.throws(() => setEnvValue(file, 'SAFE_KEY', 'a\nb'), /line breaks/i);
   fs.rmSync(file, { force: true });
 });
+
+test('lifecycle scripts never execute ENV_FILE as shell code', () => {
+  for (const file of ['scripts/backup.sh', 'scripts/restore.sh', 'scripts/doctor.sh']) {
+    const source = fs.readFileSync(file, 'utf8');
+    assert.doesNotMatch(source, /\bsource\s+[^\n]*\.env\b/i, `${file} must not source .env`);
+    assert.doesNotMatch(source, /\.(?:\s+)["']?\$?\{?ENV_FILE/i, `${file} must parse ENV_FILE as data`);
+    assert.match(source, /env-read\.mjs/, `${file} must use env-read.mjs`);
+  }
+});
