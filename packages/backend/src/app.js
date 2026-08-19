@@ -48,6 +48,24 @@ function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore
     } catch (error) { return xiboError(res, error); }
   });
 
+  app.post('/api/xibo/playlists/:playlistId/webpage', async (req, res) => {
+    const playlistId = Number(req.params.playlistId);
+    if (!Number.isInteger(playlistId) || playlistId <= 0) {
+      return res.status(400).json({ error: 'INVALID_PLAYLIST', message: 'playlistId must be a positive integer' });
+    }
+    const uri = typeof req.body?.uri === 'string' ? req.body.uri.trim() : '';
+    if (!isHttpUrl(uri)) {
+      return res.status(400).json({ error: 'INVALID_WEBPAGE_URL', message: 'uri must be a valid HTTP(S) URL' });
+    }
+    const name = typeof req.body?.name === 'string' && req.body.name.trim() ? req.body.name.trim().slice(0, 200) : 'Open Signage PLUS';
+    const requestedDuration = Number(req.body?.duration || 60);
+    const duration = Number.isFinite(requestedDuration) ? Math.max(1, Math.min(526000, Math.round(requestedDuration))) : 60;
+    try {
+      const widget = await xiboClient.createWebpageWidget({ playlistId, uri, name, duration });
+      return res.status(201).json({ widget });
+    } catch (error) { return xiboError(res, error); }
+  });
+
   app.post('/api/xibo/library/upload', express.raw({ type: () => true, limit: MAX_MEDIA_BYTES }), async (req, res) => {
     const fileName = cleanHeader(req.get('x-file-name'));
     const name = cleanHeader(req.get('x-media-name'));
@@ -142,6 +160,10 @@ function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore
   return app;
 }
 
+function isHttpUrl(value) {
+  if (!value || typeof value !== 'string') return false;
+  try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
+}
 function isPublicApiRequest(req) {
   const path = req.path;
   if (req.method === 'GET' && path === '/qr') return true;
@@ -165,4 +187,4 @@ function addCollectionRoute(app, path, key, loader) { app.get(path, async (_req,
 function cleanHeader(value) { if (!value) return undefined; return String(value).replace(/[\r\n]/g, '').trim().slice(0, 500); }
 function xiboError(res, error) { return res.status(502).json({ error: 'XIBO_REQUEST_FAILED', message: sanitizeError(error) }); }
 function sanitizeError(error) { const message = error instanceof Error ? error.message : 'Unknown integration error'; return message.replace(/(client_secret|access_token)=([^&\s]+)/gi, '$1=[redacted]').replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]'); }
-module.exports = { createApp, sanitizeError, cleanHeader, MAX_MEDIA_BYTES, requireAuth, isPublicApiRequest };
+module.exports = { createApp, sanitizeError, cleanHeader, MAX_MEDIA_BYTES, requireAuth, isPublicApiRequest, isHttpUrl };
