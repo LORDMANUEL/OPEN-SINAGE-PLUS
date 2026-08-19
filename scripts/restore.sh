@@ -5,6 +5,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 archive="${1:-}"
 ENV_FILE="${ENV_FILE:-.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.v2.yml}"
+SHARED_ROOT="${SHARED_ROOT:-shared}"
+HEALTH_URL="${RESTORE_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
 [[ -n "$archive" && -f "$archive" ]] || { echo "Usage: $0 <backup.tar.gz>" >&2; exit 1; }
 if [[ -f "$archive.sha256" ]]; then
   expected_hash="$(awk 'NR==1 {print $1}' "$archive.sha256")"
@@ -38,10 +40,10 @@ cp "$work/env" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 set -a; . "$ENV_FILE"; set +a
 
-mkdir -p shared/open-signage shared/cms/library shared/cms/custom
-if [[ -f "$work/open-signage.tar" ]]; then rm -rf shared/open-signage; tar --no-same-owner --no-same-permissions -C shared -xf "$work/open-signage.tar"; fi
-if [[ -f "$work/xibo-library.tar" ]]; then rm -rf shared/cms/library; mkdir -p shared/cms; tar --no-same-owner --no-same-permissions -C shared/cms -xf "$work/xibo-library.tar"; fi
-if [[ -f "$work/xibo-custom.tar" ]]; then rm -rf shared/cms/custom; mkdir -p shared/cms; tar --no-same-owner --no-same-permissions -C shared/cms -xf "$work/xibo-custom.tar"; fi
+mkdir -p "$SHARED_ROOT/open-signage" "$SHARED_ROOT/cms/library" "$SHARED_ROOT/cms/custom"
+if [[ -f "$work/open-signage.tar" ]]; then rm -rf "$SHARED_ROOT/open-signage"; tar --no-same-owner --no-same-permissions -C "$SHARED_ROOT" -xf "$work/open-signage.tar"; fi
+if [[ -f "$work/xibo-library.tar" ]]; then rm -rf "$SHARED_ROOT/cms/library"; mkdir -p "$SHARED_ROOT/cms"; tar --no-same-owner --no-same-permissions -C "$SHARED_ROOT/cms" -xf "$work/xibo-library.tar"; fi
+if [[ -f "$work/xibo-custom.tar" ]]; then rm -rf "$SHARED_ROOT/cms/custom"; mkdir -p "$SHARED_ROOT/cms"; tar --no-same-owner --no-same-permissions -C "$SHARED_ROOT/cms" -xf "$work/xibo-custom.tar"; fi
 
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d cms-db
 ready=0
@@ -54,7 +56,7 @@ done
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
 
 for _ in $(seq 1 60); do
-  if curl --fail --silent --max-time 3 http://127.0.0.1:8080/api/health | grep -q '"status":"ok"'; then
+  if curl --fail --silent --max-time 3 "$HEALTH_URL" | grep -q '"status":"ok"'; then
     printf 'Restore completed and health verified from %s\n' "$archive"
     exit 0
   fi
