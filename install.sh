@@ -23,9 +23,9 @@ fi
 
 if [[ ! -f "$ENV_FILE" ]]; then
   if command -v openssl >/dev/null 2>&1; then
-    MYSQL_PASSWORD="$(openssl rand -hex 12 | tr -dc 'A-Za-z0-9' | head -c 20)"
+    MYSQL_PASSWORD="$(openssl rand -hex 10)"
   else
-    MYSQL_PASSWORD="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)"
+    MYSQL_PASSWORD="$(printf '%s' "$(date +%s%N)-${RANDOM}-${RANDOM}" | sha256sum | awk '{print substr($1,1,20)}')"
   fi
 
   cat > "$ENV_FILE" <<EOF
