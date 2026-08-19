@@ -15,6 +15,7 @@ const { PlatformStore } = require('./src/platform-store');
 const { permit, xiboPermissionGuard } = require('./src/rbac-middleware');
 const { OrganizationStore } = require('./src/organization-store');
 const { createGlobalResourceScopeGuard } = require('./src/tenant-boundary');
+const { createPublicGlobalResourceGuard } = require('./src/public-tenant-boundary');
 const { validateTelemetryContext } = require('./src/telemetry-validation');
 const { MediaCatalog } = require('./src/media-catalog');
 const { MediaTranscoder } = require('./src/media-transcoder');
@@ -44,6 +45,7 @@ async function start() {
   const healthMonitor = new HealthMonitor({ deviceStore, xiboClient, notificationService, intervalMs: Number(process.env.MONITOR_INTERVAL_MS || 60000), cooldownMs: Number(process.env.ALERT_COOLDOWN_MS || 900000) });
   const qrService = new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) });
   const globalTenantGuard = createGlobalResourceScopeGuard({ organizationStore });
+  const publicGlobalTenantGuard = createPublicGlobalResourceGuard({ organizationStore });
   const publicTicketLimit = createRateLimiter({ limit: 60, windowMs: 60_000 });
   const publicFormLimit = createRateLimiter({ limit: 30, windowMs: 60_000 });
   const telemetryLimit = createRateLimiter({ limit: 240, windowMs: 60_000 });
@@ -98,7 +100,9 @@ async function start() {
   app.get('/api/platform/media/catalog', requireAuth(authService), permit('media:read'), (req, res) => res.json({ media: mediaCatalog.search({ q: req.query.q, tags: req.query.tags, limit: req.query.limit }) }));
   app.get('/api/platform/media/orphans', requireAuth(authService), permit('media:read'), (req, res) => res.json({ media: mediaCatalog.orphanCandidates({ unusedDays: req.query.days }) }));
 
-  app.post('/api/queues/:queue/tickets', publicTicketLimit, express.json({ limit: '64kb' }), async (req, res) => { try { const ticket = await queueStore.issue({ queue: req.params.queue, prefix: req.body?.prefix || 'A', customerName: req.body?.customerName || '', service: req.body?.service || '', priority: req.body?.priority || 0, metadata: req.body?.metadata || {} }); return res.status(201).json({ ticket }); } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); } });
+  // Queue names are human-readable deployment-global identifiers. In a true
+  // multi-organization installation they are disabled until P1 adds tenant IDs.
+  app.post('/api/queues/:queue/tickets', publicGlobalTenantGuard, publicTicketLimit, express.json({ limit: '64kb' }), async (req, res) => { try { const ticket = await queueStore.issue({ queue: req.params.queue, prefix: req.body?.prefix || 'A', customerName: req.body?.customerName || '', service: req.body?.service || '', priority: req.body?.priority || 0, metadata: req.body?.metadata || {} }); return res.status(201).json({ ticket }); } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); } });
   app.get('/api/platform/queues/:queue/stats', requireAuth(authService), permit('queue:read'), async (req, res) => res.json({ stats: await queueStore.stats(req.params.queue) }));
   app.post('/api/platform/queues/:queue/tickets/:ticketId/transfer', requireAuth(authService), permit('queue:operate'), express.json({ limit: '64kb' }), async (req, res) => { try { const ticket = await queueStore.transfer(req.params.queue, req.params.ticketId, req.body || {}); return ticket ? res.json({ ticket }) : res.status(404).json({ error: 'TICKET_NOT_FOUND' }); } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); } });
 
