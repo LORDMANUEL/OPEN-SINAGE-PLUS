@@ -2,16 +2,30 @@ const express = require('express');
 const cors = require('cors');
 
 const MAX_MEDIA_BYTES = 200 * 1024 * 1024;
+const DEFAULT_RATE_LIMITS = Object.freeze({
+  login: { limit: 10, windowMs: 15 * 60_000 },
+  ticket: { limit: 60, windowMs: 60_000 },
+  deviceRegister: { limit: 20, windowMs: 60_000 },
+  qr: { limit: 120, windowMs: 60_000 },
+});
 
-function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore = null, qrService = null, deviceStore = null, authService = null }) {
+function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore = null, qrService = null, deviceStore = null, authService = null, rateLimitOptions = {} }) {
   if (!xiboClient) throw new Error('xiboClient is required');
   const app = express();
   app.disable('x-powered-by');
+  app.set('trust proxy', 1);
   app.use(cors({ origin: true, credentials: false }));
   app.use(express.json({ limit: '1mb' }));
 
+  const limits = {
+    login: createRateLimiter({ ...DEFAULT_RATE_LIMITS.login, ...rateLimitOptions.login }),
+    ticket: createRateLimiter({ ...DEFAULT_RATE_LIMITS.ticket, ...rateLimitOptions.ticket }),
+    deviceRegister: createRateLimiter({ ...DEFAULT_RATE_LIMITS.deviceRegister, ...rateLimitOptions.deviceRegister }),
+    qr: createRateLimiter({ ...DEFAULT_RATE_LIMITS.qr, ...rateLimitOptions.qr }),
+  };
+
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'open-signage-api' }));
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', limits.login, async (req, res) => {
     if (!authService) return res.status(503).json({ error: 'AUTH_UNAVAILABLE' });
     try { return res.json(await authService.login(req.body?.email, req.body?.password)); }
     catch { return res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Credenciales incorrectas' }); }
@@ -96,7 +110,7 @@ function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore
     catch (error) { return res.status(502).json({ error: 'AI_GENERATION_FAILED', message: sanitizeError(error) }); }
   });
 
-  app.get('/api/qr', async (req, res) => {
+  app.get('/api/qr', limits.qr, async (req, res) => {
     if (!qrService) return res.status(503).json({ error: 'QR_UNAVAILABLE' });
     const value = String(req.query.value || '').trim();
     if (!value) return res.status(400).json({ error: 'INVALID_QR', message: 'value is required' });
@@ -108,7 +122,7 @@ function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore
     } catch (error) { return res.status(502).json({ error: 'QR_RENDER_FAILED', message: sanitizeError(error) }); }
   });
 
-  app.post('/api/queues/:queue/tickets', async (req, res) => {
+  app.post('/api/queues/:queue/tickets', limits.ticket, async (req, res) => {
     if (!queueStore) return res.status(503).json({ error: 'QUEUE_UNAVAILABLE' });
     try { return res.status(201).json({ ticket: await queueStore.issue({ queue: req.params.queue, prefix: req.body?.prefix || 'A', customerName: req.body?.customerName || '' }) }); }
     catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: sanitizeError(error) }); }
@@ -135,7 +149,7 @@ function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore
     } catch (error) { return res.status(400).json({ error: 'INVALID_QUEUE', message: sanitizeError(error) }); }
   });
 
-  app.post('/api/player/devices/register', async (req, res) => {
+  app.post('/api/player/devices/register', limits.deviceRegister, async (req, res) => {
     if (!deviceStore) return res.status(503).json({ error: 'DEVICE_STORE_UNAVAILABLE' });
     try { return res.status(201).json({ device: await deviceStore.register({ userAgent: req.get('user-agent') || req.body?.userAgent || '' }) }); }
     catch (error) { return res.status(400).json({ error: 'DEVICE_REGISTER_FAILED', message: sanitizeError(error) }); }
@@ -194,6 +208,40 @@ function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore
   return app;
 }
 
+function createRateLimiter({ limit, windowMs }) {
+  const max = Math.max(1, Number(limit || 1));
+  const duration = Math.max(1000, Number(windowMs || 60_000));
+  const buckets = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    if (buckets.size > 10_000) {
+      for (const [key, bucket] of buckets) if (bucket.resetAt <= now) buckets.delete(key);
+    }
+    const key = requestClientKey(req);
+    let bucket = buckets.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + duration };
+      buckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    const remaining = Math.max(0, max - bucket.count);
+    const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    res.set('RateLimit-Limit', String(max));
+    res.set('RateLimit-Remaining', String(remaining));
+    res.set('RateLimit-Reset', String(Math.ceil(bucket.resetAt / 1000)));
+    if (bucket.count > max) {
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: 'RATE_LIMITED', message: 'Demasiadas solicitudes. Intenta nuevamente más tarde.' });
+    }
+    return next();
+  };
+}
+
+function requestClientKey(req) {
+  const ip = String(req.ip || req.socket?.remoteAddress || 'unknown').trim();
+  return ip.slice(0, 128);
+}
+
 function isHttpUrl(value) {
   if (!value || typeof value !== 'string') return false;
   try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; }
@@ -229,4 +277,4 @@ function sanitizeError(error) {
   const message = error instanceof Error ? error.message : 'Unknown integration error';
   return message.replace(/(client_secret|access_token)=([^&\s]+)/gi, '$1=[redacted]').replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]');
 }
-module.exports = { createApp, sanitizeError, cleanHeader, MAX_MEDIA_BYTES, requireAuth, isPublicApiRequest, isHttpUrl };
+module.exports = { createApp, sanitizeError, cleanHeader, MAX_MEDIA_BYTES, requireAuth, isPublicApiRequest, isHttpUrl, createRateLimiter, requestClientKey };
