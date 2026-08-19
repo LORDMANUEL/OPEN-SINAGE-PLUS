@@ -4,7 +4,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ENV_FILE="${ENV_FILE:-.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.v2.yml}"
-BACKUP_ROOT="${BACKUP_ROOT:-shared/backups}"
+SHARED_ROOT="${SHARED_ROOT:-shared}"
+BACKUP_ROOT="${BACKUP_ROOT:-$SHARED_ROOT/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 [[ -f "$ENV_FILE" ]] || { echo "ERROR: $ENV_FILE not found" >&2; exit 1; }
 set -a; . "$ENV_FILE"; set +a
@@ -27,9 +28,9 @@ else
   exit 2
 fi
 
-[[ -d shared/open-signage ]] && tar -C shared -cf "$work/payload/open-signage.tar" open-signage
-[[ -d shared/cms/library ]] && tar -C shared/cms -cf "$work/payload/xibo-library.tar" library
-[[ -d shared/cms/custom ]] && tar -C shared/cms -cf "$work/payload/xibo-custom.tar" custom
+[[ -d "$SHARED_ROOT/open-signage" ]] && tar -C "$SHARED_ROOT" -cf "$work/payload/open-signage.tar" open-signage
+[[ -d "$SHARED_ROOT/cms/library" ]] && tar -C "$SHARED_ROOT/cms" -cf "$work/payload/xibo-library.tar" library
+[[ -d "$SHARED_ROOT/cms/custom" ]] && tar -C "$SHARED_ROOT/cms" -cf "$work/payload/xibo-custom.tar" custom
 
 (
   cd "$work/payload"
