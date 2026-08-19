@@ -58,8 +58,11 @@ services:
       context: ./packages/backend
     depends_on:
       - cms-web
+    volumes:
+      - ./shared/open-signage:/data
     environment:
       PORT: 3000
+      OPEN_SIGNAGE_DATA_DIR: /data
       XIBO_BASE_URL: ${XIBO_BASE_URL:-http://cms-web}
       XIBO_CLIENT_ID: ${XIBO_CLIENT_ID}
       XIBO_CLIENT_SECRET: ${XIBO_CLIENT_SECRET}
