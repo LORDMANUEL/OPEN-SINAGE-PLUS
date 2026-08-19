@@ -3,7 +3,8 @@ import type { PlayerScene, Ticket, XiboSchedule } from './openSignageApi';
 export interface Organization { id: string; name: string; slug: string; createdAt?: string; updatedAt?: string }
 export interface Location { id: string; organizationId: string; name: string; code: string; timezone?: string; createdAt?: string; updatedAt?: string }
 export interface Membership { id?: string; userEmail: string; organizationId: string; locationId?: string | null; createdAt?: string }
-export interface FormDefinition { id: string; name: string; schema: { fields?: Array<{ name: string; label?: string; type?: string; required?: boolean; options?: string[] }> }; createdAt: string; updatedAt: string }
+export interface FormField { name: string; label?: string; type?: 'text' | 'email' | 'tel' | 'textarea' | 'select' | 'checkbox'; required?: boolean; options?: string[] }
+export interface FormDefinition { id: string; name: string; schema: { fields?: FormField[]; submitLabel?: string; successMessage?: string }; createdAt: string; updatedAt: string }
 export interface FormResponse { id: string; formId: string; response: Record<string, unknown>; createdAt: string }
 export interface SchedulePreview { at: string; displayGroupId?: number; winner: XiboSchedule | null; matching: XiboSchedule[]; conflicts: Array<{ eventIds: Array<string | number>; reason: string }> }
 export interface AnalyticsSummary { sinceHours: number; playbackCount: number; interactionCount: number; uniqueScenes?: number; uniqueDevices?: number; actions?: Record<string, number>; [key: string]: unknown }
@@ -36,6 +37,8 @@ export const adminPlatformApi = {
   forms: async () => (await request<{ forms: FormDefinition[] }>('/api/platform/forms')).forms,
   createForm: async (name: string, schema: FormDefinition['schema']) => (await request<{ form: FormDefinition }>('/api/platform/forms', { method: 'POST', body: JSON.stringify({ name, schema }) })).form,
   formResponses: async (formId: string, limit = 500) => (await request<{ responses: FormResponse[] }>(`/api/platform/forms/${encodeURIComponent(formId)}/responses?limit=${limit}`)).responses,
+  publicForm: async (formId: string) => (await request<{ form: FormDefinition }>(`/api/forms/${encodeURIComponent(formId)}`)).form,
+  submitPublicForm: async (formId: string, response: Record<string, unknown>) => (await request<{ response: FormResponse }>(`/api/forms/${encodeURIComponent(formId)}/responses`, { method: 'POST', body: JSON.stringify(response) })).response,
 
   schedulePreview: (at: string, displayGroupId?: number) => request<SchedulePreview>('/api/platform/schedule/preview', { method: 'POST', body: JSON.stringify({ at, displayGroupId }) }),
   analytics: (hours = 24) => request<AnalyticsSummary>(`/api/platform/analytics/summary?hours=${hours}`),
