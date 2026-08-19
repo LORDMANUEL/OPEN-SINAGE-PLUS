@@ -5,10 +5,16 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ENV_FILE="${ENV_FILE:-.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.v2.yml}"
 SHARED_ROOT="${SHARED_ROOT:-shared}"
+[[ -f "$ENV_FILE" ]] || { echo "ERROR: $ENV_FILE not found" >&2; exit 1; }
+
+env_value() { node scripts/env-read.mjs "$ENV_FILE" "$1"; }
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-$(env_value MYSQL_PASSWORD)}"
+BACKUP_ROOT="${BACKUP_ROOT:-$(env_value BACKUP_ROOT)}"
+RETENTION_DAYS="${RETENTION_DAYS:-$(env_value RETENTION_DAYS)}"
 BACKUP_ROOT="${BACKUP_ROOT:-$SHARED_ROOT/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
-[[ -f "$ENV_FILE" ]] || { echo "ERROR: $ENV_FILE not found" >&2; exit 1; }
-set -a; . "$ENV_FILE"; set +a
+[[ -n "$MYSQL_PASSWORD" ]] || { echo 'ERROR: MYSQL_PASSWORD missing from env/config' >&2; exit 1; }
+[[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]] || { echo 'ERROR: RETENTION_DAYS must be an integer' >&2; exit 1; }
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 work="$(mktemp -d)"
