@@ -45,16 +45,15 @@ export default function DeviceScreen({ initialToken }: { initialToken?: string |
         async function poll() {
           try {
             const next = await openSignageApi.getDevice(current.deviceToken);
-            if (!disposed) { setDevice(next); setConnectionError(''); reconnectDelay.current = 4000; }
+            if (!disposed) { setDevice(next); current = next; setConnectionError(''); reconnectDelay.current = 4000; }
           } catch {
             if (!disposed) { setConnectionError('Sin conexión con el servidor. Reintentando…'); reconnectDelay.current = Math.min(60_000, reconnectDelay.current * 2); }
           } finally { if (!disposed) pollTimer = window.setTimeout(() => void poll(), reconnectDelay.current); }
         }
         async function heartbeat() {
           try {
-            const latestScene = current.sceneToken;
-            const next = await openSignageApi.heartbeatDevice(current.deviceToken, await deviceMetadata(latestScene));
-            if (!disposed) setDevice(previous => ({ ...(previous || next), ...next }));
+            const next = await openSignageApi.heartbeatDevice(current.deviceToken, await deviceMetadata(current.sceneToken));
+            if (!disposed) { setDevice(previous => ({ ...(previous || next), ...next })); current = { ...current, ...next }; }
           } catch { /* poll owns connectivity UX */ }
           if (!disposed) heartbeatTimer = window.setTimeout(() => void heartbeat(), 15_000);
         }
@@ -67,6 +66,6 @@ export default function DeviceScreen({ initialToken }: { initialToken?: string |
     return () => { disposed = true; if (pollTimer) window.clearTimeout(pollTimer); if (heartbeatTimer) window.clearTimeout(heartbeatTimer); };
   }, [initialToken]);
 
-  if (device?.sceneToken) return <PlayerScreen token={device.sceneToken} />;
+  if (device?.sceneToken) return <PlayerScreen token={device.sceneToken} deviceToken={device.deviceToken} />;
   return <main className="pairing-stage" role="main"><div className="pairing-card"><div className="pairing-logo"><Monitor size={42}/></div><span className="eyebrow eyebrow--light">OPEN SIGNAGE PLUS</span><h1>Vincula esta pantalla</h1><p>En el panel de administración abre <strong>Studio</strong>, publica una escena y escribe este código.</p><div className="pairing-code" aria-label="Código de vinculación">{device?.pairingCode || '······'}</div><div className="pairing-status"><Wifi size={17}/><span>{error || 'Esperando asignación…'}</span></div><small>Esta pantalla conserva su identidad, reporta salud al servidor y no necesita APK.</small></div></main>;
 }
