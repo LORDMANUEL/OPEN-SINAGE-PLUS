@@ -8,6 +8,13 @@ trap cleanup EXIT
 remote="$tmp/remote.git"
 seed="$tmp/seed"
 work="$tmp/work"
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/curl" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"status":"ok"}'
+SH
+chmod +x "$tmp/bin/curl"
+
 git init --bare "$remote" >/dev/null
 git init -b main "$seed" >/dev/null
 cd "$seed"
@@ -55,7 +62,7 @@ git add VERSION && git commit -m v3 >/dev/null
 git push origin main >/dev/null
 
 cd "$work"
-if FAIL_VERSION=3 BACKUP_SCRIPT=./fake-backup.sh INSTALL_SCRIPT=./fake-install.sh UPDATE_REMOTE=origin UPDATE_BRANCH=main UPDATE_HEALTH_URL=http://health.invalid/api/health bash scripts/update.sh; then
+if PATH="$tmp/bin:$PATH" FAIL_VERSION=3 BACKUP_SCRIPT=./fake-backup.sh INSTALL_SCRIPT=./fake-install.sh UPDATE_REMOTE=origin UPDATE_BRANCH=main UPDATE_HEALTH_URL=http://health.invalid/api/health bash scripts/update.sh; then
   echo 'bad update unexpectedly succeeded' >&2
   exit 1
 fi
