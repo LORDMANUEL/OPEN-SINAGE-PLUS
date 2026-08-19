@@ -3,6 +3,7 @@ const os = require('node:os');
 const fs = require('node:fs');
 const { createApp, requireAuth, createRateLimiter } = require('./src/app');
 const { createPlatformRouter } = require('./src/platform-routes');
+const { createAiRouter } = require('./src/ai-routes');
 const { createXiboIntegrationFromEnv } = require('./src/xibo-integration');
 const { SceneStore } = require('./src/scene-store');
 const { QueueStore } = require('./src/queue-store');
@@ -26,19 +27,12 @@ async function start() {
   const aiService = createAiServiceFromEnv(process.env);
   const qrService = new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) });
   const publicTicketLimit = createRateLimiter({ limit: 60, windowMs: 60_000 });
-  const baseApp = createApp({
-    xiboClient,
-    sceneStore: new SceneStore({ dataDir }),
-    queueStore,
-    deviceStore,
-    aiService,
-    authService,
-    qrService,
-  });
+  const baseApp = createApp({ xiboClient, sceneStore: new SceneStore({ dataDir }), queueStore, deviceStore, aiService, authService, qrService });
 
   const app = express();
   app.disable('x-powered-by');
   app.use('/api/platform', express.json({ limit: '1mb' }), requireAuth(authService), createPlatformRouter({ platformStore }));
+  app.use('/api/ai', requireAuth(authService), createAiRouter({ aiService, platformStore }));
 
   app.post('/api/xibo/library/upload', requireAuth(authService), express.raw({ type: () => true, limit: 200 * 1024 * 1024 }), async (req, res) => {
     try {
@@ -92,13 +86,7 @@ async function start() {
     let xibo = { ok: false, error: 'unavailable' };
     try { await xiboClient.authenticate(); xibo = { ok: true }; } catch (error) { xibo = { ok: false, error: String(error.message || 'xibo unavailable').slice(0, 200) }; }
     const stats = fs.statfsSync(dataDir);
-    return res.json({
-      status: 'ok', checkedAt: new Date().toISOString(), latencyMs: Date.now() - started,
-      node: process.version, uptimeSeconds: Math.round(process.uptime()), hostname: os.hostname(),
-      memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed, freeSystem: os.freemem(), totalSystem: os.totalmem() },
-      storage: { freeBytes: Number(stats.bavail) * Number(stats.bsize), totalBytes: Number(stats.blocks) * Number(stats.bsize) },
-      xibo, ai: aiService ? aiService.status() : { configured: false }, fleet: await deviceStore.fleetHealth(),
-    });
+    return res.json({ status: 'ok', checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, node: process.version, uptimeSeconds: Math.round(process.uptime()), hostname: os.hostname(), memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed, freeSystem: os.freemem(), totalSystem: os.totalmem() }, storage: { freeBytes: Number(stats.bavail) * Number(stats.bsize), totalBytes: Number(stats.blocks) * Number(stats.bsize) }, xibo, ai: aiService ? aiService.diagnostics() : { configured: false }, fleet: await deviceStore.fleetHealth() });
   });
 
   app.get('/q/:slug', (req, res) => {
@@ -106,10 +94,7 @@ async function start() {
     if (!qr) return res.status(404).send('QR not found');
     return res.redirect(302, qr.destination);
   });
-  app.get('/api/forms/:id', (req, res) => {
-    const form = platformStore.getForm(req.params.id);
-    return form ? res.json({ form }) : res.status(404).json({ error: 'FORM_NOT_FOUND' });
-  });
+  app.get('/api/forms/:id', (req, res) => { const form = platformStore.getForm(req.params.id); return form ? res.json({ form }) : res.status(404).json({ error: 'FORM_NOT_FOUND' }); });
   app.post('/api/forms/:id/responses', express.json({ limit: '256kb' }), (req, res) => {
     try { return res.status(201).json({ response: platformStore.submitForm(req.params.id, req.body || {}) }); }
     catch (error) { return res.status(400).json({ error: 'INVALID_FORM_RESPONSE', message: error.message }); }
