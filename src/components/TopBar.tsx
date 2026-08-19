@@ -3,8 +3,14 @@ import { Bell, Clock } from 'lucide-react';
 import { useAppContext } from '../context/app-context';
 
 const viewTitles: Record<string, string> = {
-  dashboard: 'Dashboard General', integration: 'Motor Xibo', signage: 'Pantallas Digital Signage',
-  kiosk: 'Kioscos Interactivos', dashboards: 'Dashboards BI', settings: 'Configuración',
+  dashboard: 'Dashboard General',
+  studio: 'Studio',
+  media: 'Biblioteca multimedia',
+  integration: 'Motor Xibo',
+  signage: 'Pantallas Digital Signage',
+  kiosk: 'Kioscos Interactivos',
+  dashboards: 'Dashboards BI',
+  settings: 'Configuración',
 };
 
 export default function TopBar({ currentView }: { currentView: string }) {
