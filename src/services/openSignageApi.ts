@@ -29,6 +29,7 @@ export type PlayerItem =
 export interface PlayerScene { token?: string; name: string; duration?: number; background?: string; items: PlayerItem[]; createdAt?: string; updatedAt?: string }
 export interface AiStatus { configured: boolean; provider: string | null; model: string | null }
 export interface Ticket { id: string; queue: string; prefix: string; sequence?: number; number: string; customerName?: string; status: 'waiting' | 'called' | 'completed'; desk?: string; createdAt?: string; calledAt?: string; completedAt?: string; updatedAt?: string }
+export interface PlayerDevice { deviceToken: string; pairingCode: string; sceneToken: string | null; name?: string; userAgent?: string; createdAt?: string; updatedAt?: string; lastSeenAt?: string }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
@@ -72,6 +73,9 @@ export const openSignageApi = {
   createPlayerScene: (scene: PlayerScene) => apiRequest<{ token: string; scene: PlayerScene }>('/api/player/scenes', { method: 'POST', body: JSON.stringify(scene) }),
   updatePlayerScene: (token: string, scene: PlayerScene) => apiRequest<{ scene: PlayerScene }>(`/api/player/scenes/${encodeURIComponent(token)}`, { method: 'PUT', body: JSON.stringify(scene) }),
   getPlayerScene: async (token: string) => (await apiRequest<{ scene: PlayerScene }>(`/api/player/scenes/${encodeURIComponent(token)}`)).scene,
+  registerDevice: async () => (await apiRequest<{ device: PlayerDevice }>('/api/player/devices/register', { method: 'POST', body: '{}' })).device,
+  getDevice: async (deviceToken: string) => (await apiRequest<{ device: PlayerDevice }>(`/api/player/devices/${encodeURIComponent(deviceToken)}`)).device,
+  pairDevice: async (pairingCode: string, sceneToken: string, name = '') => (await apiRequest<{ device: PlayerDevice }>('/api/player/devices/pair', { method: 'POST', body: JSON.stringify({ pairingCode, sceneToken, name }) })).device,
   aiStatus: () => apiRequest<AiStatus>('/api/ai/status'),
   generateScene: async (prompt: string) => (await apiRequest<{ scene: PlayerScene }>('/api/ai/generate-scene', { method: 'POST', body: JSON.stringify({ prompt }) })).scene,
   qrUrl: (value: string) => `${API_BASE}/api/qr?value=${encodeURIComponent(value)}`,
