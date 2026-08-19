@@ -20,7 +20,7 @@ const fakeXibo = {
   async getDisplayGroups() { return []; },
   async getSchedules() { return []; },
   async createSchedule(payload) { return { eventId: 9, payload }; },
-  async createLayout(payload) { calls.push({ type: 'layout', payload }); return { layoutId: 77, ...payload }; },
+  async createLayout(payload) { calls.push({ type: 'layout', payload }); return { ...payload, layoutId: 77 }; },
   async uploadMedia(payload) { calls.push({ type: 'media', payload }); return [{ mediaId: 88, name: payload.name || payload.fileName }]; },
   async publishLayout(layoutId) { return { layoutId, published: true }; },
 };
