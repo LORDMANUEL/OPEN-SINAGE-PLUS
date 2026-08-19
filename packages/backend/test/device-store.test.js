@@ -20,6 +20,21 @@ test('device store registers a persistent browser with a short pairing code', as
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
+test('device store lists persisted browser devices for the admin inventory', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'osp-devices-'));
+  try {
+    const store = new DeviceStore({ dataDir: dir });
+    const first = await store.register({ userAgent: 'Lobby TV' });
+    const second = await store.register({ userAgent: 'Kiosk Chrome' });
+    await store.pair({ pairingCode: first.pairingCode, sceneToken: 'demo-player-token', name: 'Lobby Principal' });
+
+    const devices = await store.list();
+    assert.equal(devices.length, 2);
+    assert.equal(devices[0].name, 'Lobby Principal');
+    assert.ok(devices.some(device => device.deviceToken === second.deviceToken));
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
 test('device store pairs by short code and assigns a scene', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'osp-devices-'));
   try {
