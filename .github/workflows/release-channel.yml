@@ -65,7 +65,7 @@ jobs:
           NODE
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUIRED: ${{ inputs.channel == 'alpha' && '["release-policy","frontend","backend","e2e","security-codeql","security-secrets","security-fs"]' || '["release-policy","frontend","backend","e2e","deployment","security-codeql","security-secrets","security-fs","security-images"]' }}
+          REQUIRED: ${{ inputs.channel == 'alpha' && '["release-policy","lifecycle","frontend","backend","e2e","security-codeql","security-secrets","security-fs"]' || '["release-policy","lifecycle","frontend","backend","e2e","deployment","security-codeql","security-secrets","security-fs","security-images"]' }}
 
       - name: Cut prerelease tag
         if: inputs.channel != 'stable'
