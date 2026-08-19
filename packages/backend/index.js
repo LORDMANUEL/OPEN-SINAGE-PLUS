@@ -50,7 +50,7 @@ async function start() {
   app.use('/api/platform', express.json({ limit: '1mb' }), requireAuth(authService), createPlatformRouter({ platformStore }));
   app.use('/api/platform/organizations', requireAuth(authService), createOrganizationRouter({ organizationStore, platformStore }));
   app.use('/api/platform/schedule', requireAuth(authService), createScheduleRouter({ xiboClient, platformStore }));
-  app.use('/api/platform/media', requireAuth(authService), permit('media:write'), createMediaRouter({ xiboClient, mediaCatalog, mediaTranscoder, platformStore }));
+  app.use('/api/platform/media', requireAuth(authService), createMediaRouter({ xiboClient, mediaCatalog, mediaTranscoder, platformStore }));
   app.use('/api/ai', requireAuth(authService), permit('ai:use'), createAiRouter({ aiService, platformStore }));
 
   app.get('/api/platform/notifications/status', requireAuth(authService), permit('health:read'), (_req, res) => res.json(notificationService.status()));
