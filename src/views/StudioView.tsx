@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Copy, ExternalLink, Link2, MonitorPlay, Plus, Sparkles } from 'lucide-react';
-import { openSignageApi, type PlayerScene, type XiboPlaylist } from '../services/openSignageApi';
+import { BookOpenCheck, Copy, ExternalLink, Link2, MonitorPlay, Plus, Sparkles } from 'lucide-react';
+import { openSignageApi, type Campaign, type PlayerScene, type XiboPlaylist } from '../services/openSignageApi';
 import VisualSceneEditor from '../components/VisualSceneEditor';
 
 const initialScene: PlayerScene = {
@@ -23,6 +23,9 @@ export default function StudioView() {
   const [xiboPlaylists, setXiboPlaylists] = useState<XiboPlaylist[]>([]);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState('');
   const [xiboBridgeMessage, setXiboBridgeMessage] = useState('');
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState('');
+  const [campaignMessage, setCampaignMessage] = useState('');
 
   const playerUrl = useMemo(() => playerToken ? `${window.location.origin}/player/${playerToken}` : '', [playerToken]);
   const headlineItem = scene.items.find(item => item.type === 'text' && item.id === 'headline');
@@ -30,12 +33,20 @@ export default function StudioView() {
 
   useEffect(() => {
     let disposed = false;
-    void openSignageApi.xiboPlaylists().then(playlists => {
+    void Promise.allSettled([openSignageApi.xiboPlaylists(), openSignageApi.campaigns()]).then(results => {
       if (disposed) return;
-      const usable = playlists.filter(playlist => Number.isInteger(Number(playlist.playlistId)) && Number(playlist.playlistId) > 0);
-      setXiboPlaylists(usable);
-      if (usable[0]?.playlistId) setSelectedPlaylistId(String(usable[0].playlistId));
-    }).catch(() => { if (!disposed) setXiboPlaylists([]); });
+      const playlistResult = results[0];
+      if (playlistResult.status === 'fulfilled') {
+        const usable = playlistResult.value.filter(playlist => Number.isInteger(Number(playlist.playlistId)) && Number(playlist.playlistId) > 0);
+        setXiboPlaylists(usable);
+        if (usable[0]?.playlistId) setSelectedPlaylistId(String(usable[0].playlistId));
+      }
+      const campaignResult = results[1];
+      if (campaignResult.status === 'fulfilled') {
+        setCampaigns(campaignResult.value);
+        if (campaignResult.value[0]?.id) setSelectedCampaignId(campaignResult.value[0].id);
+      }
+    });
     return () => { disposed = true; };
   }, []);
 
@@ -73,6 +84,17 @@ export default function StudioView() {
     finally { setBusy(false); }
   }
 
+  async function saveCampaignVersion() {
+    if (!selectedCampaignId) return;
+    setBusy(true); setCampaignMessage('');
+    try {
+      const version = await openSignageApi.addCampaignVersion(selectedCampaignId, scene);
+      setCampaignMessage(`Versión ${version.version} guardada. La campaña ya puede enviarse a revisión.`);
+      setCampaigns(await openSignageApi.campaigns());
+    } catch (error) { setCampaignMessage(error instanceof Error ? error.message : 'No se pudo guardar la versión'); }
+    finally { setBusy(false); }
+  }
+
   async function copyPlayerUrl() { if (playerUrl) { await navigator.clipboard?.writeText(playerUrl); setMessage('URL del player copiada.'); } }
   async function pairPublishedScene() {
     if (!playerToken || !pairingCode.trim()) return;
@@ -107,6 +129,11 @@ export default function StudioView() {
           <div className="pairing-box"><strong>Vincular una TV / navegador</strong><p>Abra <code>{window.location.origin}/screen</code> en la pantalla y escriba aquí el código de 6 caracteres.</p><label>Código de pantalla<input value={pairingCode} onChange={event => setPairingCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} placeholder="AB12CD" maxLength={6}/></label><label>Nombre de la pantalla<input value={deviceName} onChange={event => setDeviceName(event.target.value)} placeholder="Lobby TV"/></label><button className="button button--primary" type="button" disabled={busy || pairingCode.length !== 6} onClick={() => void pairPublishedScene()}>Vincular a escena publicada</button>{pairMessage && <div className="notice notice--success">{pairMessage}</div>}</div>
         </div>}
       </form>
+      <div className="workspace-panel form-grid">
+        <div className="panel-title"><h2><BookOpenCheck size={20}/> Versionado de campaña</h2><p>Guarda la escena actual como versión auditable antes de revisión/aprobación.</p></div>
+        {campaigns.length > 0 ? <><label>Campaña<select aria-label="Campaña para versionar" value={selectedCampaignId} onChange={event => setSelectedCampaignId(event.target.value)}>{campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name} · {campaign.status}</option>)}</select></label><button className="button button--primary" type="button" disabled={busy || !selectedCampaignId} onClick={() => void saveCampaignVersion()}><BookOpenCheck size={16}/> Guardar nueva versión</button></> : <p>Crea primero una campaña en Operaciones. Luego podrás adjuntar esta escena y enviarla al flujo de aprobación.</p>}
+        {campaignMessage && <div className="notice notice--success">{campaignMessage}</div>}
+      </div>
       <form className="workspace-panel form-grid" onSubmit={createLayout}><div className="panel-title"><h2><Plus size={20}/> Layout Xibo</h2><p>Genera un layout draft directamente en el motor Xibo.</p></div><label>Nombre del layout<input value={layoutName} onChange={event => setLayoutName(event.target.value)} required /></label><label>Resolution ID<input type="number" min="1" value={resolutionId} onChange={event => setResolutionId(Number(event.target.value || 1))} required /></label><button className="button button--primary" type="submit" disabled={busy}><Plus size={18}/> Crear layout en Xibo</button>{layoutResult && <div className="notice notice--success">{layoutResult}</div>}<div className="studio-hint"><strong>Dos rutas, un solo contenido</strong><p>Una escena PLUS publicada puede vincularse a una pantalla browser-first o insertarse como Webpage en un playlist Xibo.</p></div></form>
     </div>
   </section>;
