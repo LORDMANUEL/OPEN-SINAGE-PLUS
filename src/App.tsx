@@ -15,8 +15,9 @@ import AiStudioView from './views/AiStudioView';
 import QueueView from './views/QueueView';
 
 function App() {
-  const { isLoggedIn } = useAppContext();
+  const { isLoggedIn, authReady } = useAppContext();
   const [currentView, setCurrentView] = useState('dashboard');
+  if (!authReady) return <main className="player-loading"><div><strong>Open Signage Plus</strong><span>Verificando sesión…</span></div></main>;
   if (!isLoggedIn) return <LoginScreen />;
 
   const renderContent = () => {
@@ -34,20 +35,11 @@ function App() {
       default: return <DashboardView />;
     }
   };
-
   return <div className="app-shell"><Sidebar currentView={currentView} setCurrentView={setCurrentView} /><div className="app-content"><TopBar currentView={currentView} /><main className="app-main">{renderContent()}</main></div></div>;
 }
 
-function getPlayerTokenFromPath() {
-  const match = window.location.pathname.match(/^\/player\/([a-zA-Z0-9_-]{12,128})\/?$/);
-  return match?.[1] ?? null;
-}
-
-function getDeviceTokenFromPath() {
-  if (/^\/screen\/?$/.test(window.location.pathname)) return '';
-  const match = window.location.pathname.match(/^\/screen\/([a-zA-Z0-9_-]{20,128})\/?$/);
-  return match?.[1] ?? null;
-}
+function getPlayerTokenFromPath() { const match = window.location.pathname.match(/^\/player\/([a-zA-Z0-9_-]{12,128})\/?$/); return match?.[1] ?? null; }
+function getDeviceTokenFromPath() { if (/^\/screen\/?$/.test(window.location.pathname)) return ''; const match = window.location.pathname.match(/^\/screen\/([a-zA-Z0-9_-]{20,128})\/?$/); return match?.[1] ?? null; }
 
 export default function AppWrapper() {
   const playerToken = getPlayerTokenFromPath();
