@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: node --test tests/release-policy.test.mjs tests/release-cli.test.mjs tests/release-config.test.mjs
+      - run: node --test tests/release-policy.test.mjs tests/release-cli.test.mjs tests/release-config.test.mjs tests/sync-lock-metadata.test.mjs
 
   frontend:
     runs-on: ubuntu-latest
@@ -37,15 +37,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify package metadata
-        run: |
-          node - <<'NODE'
-          const p = require('./package.json');
-          const l = require('./package-lock.json');
-          if (p.name !== l.name || p.version !== l.version || p.name !== l.packages[''].name || p.version !== l.packages[''].version) {
-            console.error('package.json and package-lock.json metadata are out of sync');
-            process.exit(1);
-          }
-          NODE
+        run: node scripts/release/sync-lock-metadata.mjs --check
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
