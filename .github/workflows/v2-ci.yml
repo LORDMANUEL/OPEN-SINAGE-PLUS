@@ -66,6 +66,7 @@ jobs:
           bash -n scripts/restore.sh
           bash -n scripts/update.sh
           bash -n scripts/doctor.sh
+          bash -n scripts/verify-backup.sh
       - name: Validate Docker Compose V2 stack
         run: |
           cp .env.example .env.ci
