@@ -11,7 +11,8 @@ const { createXiboIntegrationFromEnv } = require('./src/xibo-integration');
 const { SceneStore } = require('./src/scene-store');
 const { QueueStore } = require('./src/queue-store');
 const { DeviceStore } = require('./src/device-store');
-const { PlatformStore, hasPermission } = require('./src/platform-store');
+const { PlatformStore } = require('./src/platform-store');
+const { permit, xiboPermissionGuard } = require('./src/rbac-middleware');
 const { OrganizationStore } = require('./src/organization-store');
 const { MediaCatalog } = require('./src/media-catalog');
 const { MediaTranscoder } = require('./src/media-transcoder');
@@ -92,7 +93,6 @@ async function start() {
   app.get('/api/forms/:id', (req, res) => { const form = platformStore.getForm(req.params.id); return form ? res.json({ form }) : res.status(404).json({ error: 'FORM_NOT_FOUND' }); });
   app.post('/api/forms/:id/responses', publicFormLimit, express.json({ limit: '256kb' }), (req, res) => { try { return res.status(201).json({ response: platformStore.submitForm(req.params.id, req.body || {}) }); } catch (error) { return res.status(400).json({ error: 'INVALID_FORM_RESPONSE', message: error.message }); } });
 
-  // RBAC guard for routes served by the base gateway.
   app.use('/api/xibo', requireAuth(authService), xiboPermissionGuard);
   app.use('/api/player/scenes', (req, res, next) => {
     if (req.method === 'GET') return next();
@@ -108,19 +108,6 @@ async function start() {
   const server = app.listen(port, () => { console.log(`Open Signage API listening on http://localhost:${port}`); healthMonitor.start(); });
   const shutdown = () => server.close(() => { healthMonitor.stop(); analyticsStore.close(); mediaCatalog.close(); organizationStore.close(); platformStore.close(); process.exit(0); });
   process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);
-}
-
-function permit(permission) {
-  return (req, res, next) => hasPermission(req.auth?.role, permission) ? next() : res.status(403).json({ error: 'FORBIDDEN', permission });
-}
-function xiboPermissionGuard(req, res, next) {
-  const path = req.path;
-  let permission;
-  if (path.startsWith('/library')) permission = req.method === 'GET' ? 'media:read' : 'media:write';
-  else if (path.startsWith('/schedules')) permission = req.method === 'GET' ? 'schedule:read' : 'schedule:write';
-  else if (req.method === 'GET') permission = 'screen:read';
-  else permission = 'campaign:write';
-  return permit(permission)(req, res, next);
 }
 
 start().catch(error => { console.error('Open Signage API failed to start:', error); process.exit(1); });
