@@ -3,115 +3,43 @@ export interface GatewayHealth {
   service: string;
 }
 
-export interface XiboStatus {
-  connected: boolean;
-  error?: string;
-}
+export interface XiboStatus { connected: boolean; error?: string }
+export interface XiboDisplay { displayId?: number; display?: string; displayGroupId?: number; licensed?: number | boolean; loggedIn?: number | boolean; lastAccessed?: string; [key: string]: unknown }
+export interface XiboLayout { layoutId?: number; layout?: string; status?: number | string; duration?: number; retired?: number | boolean; [key: string]: unknown }
+export interface XiboMedia { mediaId?: number; name?: string; mediaType?: string; duration?: number; fileSize?: number; fileName?: string; thumbnailUrl?: string; [key: string]: unknown }
+export interface XiboPlaylist { playlistId?: number; name?: string; duration?: number; [key: string]: unknown }
+export interface XiboDisplayGroup { displayGroupId?: number; displayGroup?: string; isDisplaySpecific?: number | boolean; [key: string]: unknown }
+export interface XiboSchedule { eventId?: number; eventName?: string; fromDt?: string | number; toDt?: string | number; [key: string]: unknown }
 
-export interface XiboDisplay {
-  displayId?: number;
-  display?: string;
-  displayGroupId?: number;
-  licensed?: number | boolean;
-  loggedIn?: number | boolean;
-  lastAccessed?: string;
-  [key: string]: unknown;
-}
+export interface CreateScheduleInput { layoutId: number; eventTypeId: number; displayGroupIds: number[]; eventName?: string; fromDt?: string; toDt?: string; dayPartId?: number }
+export interface CreateLayoutInput { name: string; resolutionId?: number; layoutId?: number; description?: string; code?: string; returnDraft?: boolean }
 
-export interface XiboLayout {
-  layoutId?: number;
-  layout?: string;
-  status?: number | string;
-  duration?: number;
-  retired?: number | boolean;
-  [key: string]: unknown;
-}
-
-export interface XiboMedia {
-  mediaId?: number;
-  name?: string;
-  mediaType?: string;
-  duration?: number;
-  fileSize?: number;
-  fileName?: string;
-  thumbnailUrl?: string;
-  [key: string]: unknown;
-}
-
-export interface XiboPlaylist {
-  playlistId?: number;
-  name?: string;
-  duration?: number;
-  [key: string]: unknown;
-}
-
-export interface XiboDisplayGroup {
-  displayGroupId?: number;
-  displayGroup?: string;
-  isDisplaySpecific?: number | boolean;
-  [key: string]: unknown;
-}
-
-export interface XiboSchedule {
-  eventId?: number;
-  eventName?: string;
-  fromDt?: string | number;
-  toDt?: string | number;
-  [key: string]: unknown;
-}
-
-export interface CreateScheduleInput {
-  layoutId: number;
-  eventTypeId: number;
-  displayGroupIds: number[];
-  eventName?: string;
-  fromDt?: string;
-  toDt?: string;
-  dayPartId?: number;
-}
-
-export interface CreateLayoutInput {
-  name: string;
-  resolutionId?: number;
-  layoutId?: number;
-  description?: string;
-  code?: string;
-  returnDraft?: boolean;
-}
+export type PlayerAction =
+  | { type: 'openUrl'; url: string }
+  | { type: 'ticket'; queue: string; prefix?: string };
 
 export type PlayerItem =
   | { id?: string; type: 'text'; text: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number; color?: string; fontSize?: number; align?: 'left' | 'center' | 'right' }
   | { id?: string; type: 'image'; src: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number; fit?: 'cover' | 'contain' | 'fill' }
   | { id?: string; type: 'video'; src: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number; fit?: 'cover' | 'contain' | 'fill'; muted?: boolean; loop?: boolean; autoplay?: boolean }
-  | { id?: string; type: 'html'; html: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number };
+  | { id?: string; type: 'html'; html: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number }
+  | { id?: string; type: 'button'; text: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number; color?: string; background?: string; action: PlayerAction }
+  | { id?: string; type: 'qr'; value: string; label?: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number };
 
-export interface PlayerScene {
-  token?: string;
-  name: string;
-  duration?: number;
-  background?: string;
-  items: PlayerItem[];
-  createdAt?: string;
-  updatedAt?: string;
-}
+export interface PlayerScene { token?: string; name: string; duration?: number; background?: string; items: PlayerItem[]; createdAt?: string; updatedAt?: string }
+export interface AiStatus { configured: boolean; provider: string | null; model: string | null }
+export interface Ticket { id: string; queue: string; prefix: string; sequence?: number; number: string; customerName?: string; status: 'waiting' | 'called' | 'completed'; desk?: string; createdAt?: string; calledAt?: string; completedAt?: string; updatedAt?: string }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: {
-      Accept: 'application/json',
-      ...(init?.body && typeof init.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
-      ...(init?.headers || {}),
-    },
+    headers: { Accept: 'application/json', ...(init?.body && typeof init.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...(init?.headers || {}) },
   });
-
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = typeof payload?.message === 'string'
-      ? payload.message
-      : `Open Signage API error ${response.status}`;
+    const message = typeof payload?.message === 'string' ? payload.message : `Open Signage API error ${response.status}`;
     throw new Error(message);
   }
   return payload as T;
@@ -120,13 +48,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 async function uploadBinary(file: File, name?: string, tags?: string): Promise<XiboMedia[]> {
   const response = await fetch(`${API_BASE}/api/xibo/library/upload`, {
     method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': file.type || 'application/octet-stream',
-      'X-File-Name': file.name,
-      ...(name ? { 'X-Media-Name': name } : {}),
-      ...(tags ? { 'X-Media-Tags': tags } : {}),
-    },
+    headers: { Accept: 'application/json', 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': file.name, ...(name ? { 'X-Media-Name': name } : {}), ...(tags ? { 'X-Media-Tags': tags } : {}) },
     body: file,
   });
   const payload = await response.json().catch(() => ({}));
@@ -150,4 +72,11 @@ export const openSignageApi = {
   createPlayerScene: (scene: PlayerScene) => apiRequest<{ token: string; scene: PlayerScene }>('/api/player/scenes', { method: 'POST', body: JSON.stringify(scene) }),
   updatePlayerScene: (token: string, scene: PlayerScene) => apiRequest<{ scene: PlayerScene }>(`/api/player/scenes/${encodeURIComponent(token)}`, { method: 'PUT', body: JSON.stringify(scene) }),
   getPlayerScene: async (token: string) => (await apiRequest<{ scene: PlayerScene }>(`/api/player/scenes/${encodeURIComponent(token)}`)).scene,
+  aiStatus: () => apiRequest<AiStatus>('/api/ai/status'),
+  generateScene: async (prompt: string) => (await apiRequest<{ scene: PlayerScene }>('/api/ai/generate-scene', { method: 'POST', body: JSON.stringify({ prompt }) })).scene,
+  qrUrl: (value: string) => `${API_BASE}/api/qr?value=${encodeURIComponent(value)}`,
+  issueTicket: async (queue: string, prefix = 'A', customerName = '') => (await apiRequest<{ ticket: Ticket }>(`/api/queues/${encodeURIComponent(queue)}/tickets`, { method: 'POST', body: JSON.stringify({ prefix, customerName }) })).ticket,
+  listTickets: async (queue: string) => (await apiRequest<{ tickets: Ticket[] }>(`/api/queues/${encodeURIComponent(queue)}`)).tickets,
+  callNextTicket: async (queue: string, desk: string) => (await apiRequest<{ ticket: Ticket }>(`/api/queues/${encodeURIComponent(queue)}/call-next`, { method: 'POST', body: JSON.stringify({ desk }) })).ticket,
+  completeTicket: async (queue: string, ticketId: string) => (await apiRequest<{ ticket: Ticket }>(`/api/queues/${encodeURIComponent(queue)}/tickets/${encodeURIComponent(ticketId)}/complete`, { method: 'POST' })).ticket,
 };
