@@ -5,6 +5,13 @@ function createPlatformRouter({ platformStore }) {
   if (!platformStore) throw new Error('platformStore is required');
   const router = express.Router();
 
+  // Retention must be time-based, not traffic-based. This lightweight timer is
+  // intentionally unref'ed so it never blocks a graceful Node shutdown.
+  const retentionTimer = setInterval(() => {
+    try { platformStore.purgeExpiredFormResponses(); } catch { /* retention must not crash the API */ }
+  }, 6 * 60 * 60 * 1000);
+  retentionTimer.unref?.();
+
   router.get('/me', (req, res) => res.json({ user: req.auth, permissions: ROLE_PERMISSIONS[req.auth?.role] || [] }));
 
   router.get('/users', permit('user:manage'), (_req, res) => res.json({ users: platformStore.listUsers() }));
