@@ -29,11 +29,13 @@ jobs:
   lifecycle:
     name: lifecycle
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - name: Backup → verify → destructive change → restore → health
         run: bash scripts/lifecycle-selftest.sh
+      - name: Upgrade → health → failed upgrade → rollback
+        run: bash scripts/update-selftest.sh
 
   frontend:
     runs-on: ubuntu-latest
@@ -100,6 +102,7 @@ jobs:
           bash -n scripts/doctor.sh
           bash -n scripts/verify-backup.sh
           bash -n scripts/lifecycle-selftest.sh
+          bash -n scripts/update-selftest.sh
       - name: Validate Docker Compose V2 stack
         run: |
           cp .env.example .env.ci
