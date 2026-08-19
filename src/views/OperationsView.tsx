@@ -8,6 +8,7 @@ type Tab = 'health' | 'campaigns' | 'users' | 'audit' | 'brand' | 'qr';
 export default function OperationsView() {
   const { currentUser } = useAppContext();
   const isAdmin = currentUser?.role === 'admin';
+  const canManageCampaigns = isAdmin || currentUser?.role === 'marketing';
   const [tab, setTab] = useState<Tab>('health');
   const tabs = useMemo(() => [
     { id: 'health' as const, label: 'Salud', icon: Activity, show: true },
@@ -22,7 +23,7 @@ export default function OperationsView() {
     <header className="section-header"><div><span className="eyebrow">PRODUCCIÓN</span><h2>Centro de Operaciones</h2><p>Usuarios, campañas, auditoría, marca, QR y salud de toda la flota desde una sola consola.</p></div></header>
     <div className="inline-actions" style={{ marginBottom: 18 }}>{tabs.map(item => <button key={item.id} className={`button ${tab === item.id ? 'button--primary' : 'button--dark'}`} type="button" onClick={() => setTab(item.id)}><item.icon size={16}/>{item.label}</button>)}</div>
     {tab === 'health' && <HealthPanel />}
-    {tab === 'campaigns' && <CampaignPanel />}
+    {tab === 'campaigns' && <CampaignPanel canManage={canManageCampaigns} />}
     {tab === 'users' && isAdmin && <UsersPanel />}
     {tab === 'audit' && isAdmin && <AuditPanel />}
     {tab === 'brand' && isAdmin && <BrandPanel />}
@@ -52,19 +53,19 @@ function HealthPanel() {
   </div>;
 }
 
-function CampaignPanel() {
+function CampaignPanel({ canManage }: { canManage: boolean }) {
   const [items, setItems] = useState<Campaign[]>([]);
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const refresh = useCallback(async () => { try { setItems(await openSignageApi.campaigns()); } catch (e) { setMessage(e instanceof Error ? e.message : 'Error'); } }, []);
   useEffect(() => { void refresh(); }, [refresh]);
-  async function create() { if (!name.trim()) return; try { await openSignageApi.createCampaign(name.trim()); setName(''); setMessage('Campaña creada en borrador.'); await refresh(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Error'); } }
-  async function status(item: Campaign, next: Campaign['status']) { try { await openSignageApi.setCampaignStatus(item.id, next); await refresh(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Error'); } }
+  async function create() { if (!name.trim() || !canManage) return; try { await openSignageApi.createCampaign(name.trim()); setName(''); setMessage('Campaña creada en borrador.'); await refresh(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Error'); } }
+  async function status(item: Campaign, next: Campaign['status']) { if (!canManage) return; try { await openSignageApi.setCampaignStatus(item.id, next); await refresh(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Error'); } }
   return <div className="workspace-panel">
     <div className="panel-title"><h2>Campañas y aprobación</h2><p>Draft → review → approved → published con historial de versiones.</p></div>
-    <div className="form-grid"><label>Nueva campaña<input value={name} onChange={e => setName(e.target.value)} placeholder="Promoción Septiembre"/></label><div className="inline-actions"><button className="button button--primary" onClick={() => void create()}>Crear</button></div></div>
+    {canManage ? <div className="form-grid"><label>Nueva campaña<input value={name} onChange={e => setName(e.target.value)} placeholder="Promoción Septiembre"/></label><div className="inline-actions"><button className="button button--primary" onClick={() => void create()}>Crear</button></div></div> : <div className="notice">Modo lectura: este rol puede consultar campañas, pero no cambiar su estado.</div>}
     {message && <div className="notice notice--success">{message}</div>}
-    <div className="resource-list">{items.map(item => <div className="resource-row" key={item.id}><div><strong>{item.name} · {item.status}</strong><small>Actualizada {new Date(item.updatedAt).toLocaleString()}</small></div><div className="inline-actions">{item.status === 'draft' && <button className="button button--dark" onClick={() => void status(item, 'review')}>Enviar a revisión</button>}{item.status === 'review' && <button className="button button--primary" onClick={() => void status(item, 'approved')}>Aprobar</button>}{item.status === 'approved' && <button className="button button--primary" onClick={() => void status(item, 'published')}>Publicar</button>}</div></div>)}</div>
+    <div className="resource-list">{items.map(item => <div className="resource-row" key={item.id}><div><strong>{item.name} · {item.status}</strong><small>Actualizada {new Date(item.updatedAt).toLocaleString()}</small></div>{canManage && <div className="inline-actions">{item.status === 'draft' && <button className="button button--dark" onClick={() => void status(item, 'review')}>Enviar a revisión</button>}{item.status === 'review' && <button className="button button--primary" onClick={() => void status(item, 'approved')}>Aprobar</button>}{item.status === 'approved' && <button className="button button--primary" onClick={() => void status(item, 'published')}>Publicar</button>}</div>}</div>)}</div>
   </div>;
 }
 
