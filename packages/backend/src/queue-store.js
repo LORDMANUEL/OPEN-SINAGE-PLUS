@@ -2,6 +2,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
+const fileLocks = new Map();
+
 class QueueStore {
   constructor({ dataDir = process.env.OPEN_SIGNAGE_DATA_DIR || '/data' } = {}) {
     this.dataDir = dataDir;
@@ -11,26 +13,28 @@ class QueueStore {
   async issue({ queue, prefix = 'A', customerName = '' }) {
     const queueId = validateQueue(queue);
     const ticketPrefix = validatePrefix(prefix);
-    const state = await this.#load();
-    const items = Array.isArray(state[queueId]) ? state[queueId] : [];
-    const nextSequence = items.reduce((max, item) => Math.max(max, Number(item.sequence || 0)), 0) + 1;
-    const now = new Date().toISOString();
-    const ticket = {
-      id: crypto.randomUUID(),
-      queue: queueId,
-      prefix: ticketPrefix,
-      sequence: nextSequence,
-      number: `${ticketPrefix}${String(nextSequence).padStart(3, '0')}`,
-      customerName: cleanText(customerName, 120),
-      status: 'waiting',
-      desk: '',
-      createdAt: now,
-      updatedAt: now,
-    };
-    items.push(ticket);
-    state[queueId] = items;
-    await this.#save(state);
-    return ticket;
+    return withFileLock(this.filePath, async () => {
+      const state = await this.#load();
+      const items = Array.isArray(state[queueId]) ? state[queueId] : [];
+      const nextSequence = items.reduce((max, item) => Math.max(max, Number(item.sequence || 0)), 0) + 1;
+      const now = new Date().toISOString();
+      const ticket = {
+        id: crypto.randomUUID(),
+        queue: queueId,
+        prefix: ticketPrefix,
+        sequence: nextSequence,
+        number: `${ticketPrefix}${String(nextSequence).padStart(3, '0')}`,
+        customerName: cleanText(customerName, 120),
+        status: 'waiting',
+        desk: '',
+        createdAt: now,
+        updatedAt: now,
+      };
+      items.push(ticket);
+      state[queueId] = items;
+      await this.#save(state);
+      return ticket;
+    });
   }
 
   async list(queue) {
@@ -41,41 +45,47 @@ class QueueStore {
 
   async callNext(queue, { desk = '' } = {}) {
     const queueId = validateQueue(queue);
-    const state = await this.#load();
-    const items = Array.isArray(state[queueId]) ? state[queueId] : [];
-    const ticket = items.find(item => item.status === 'waiting');
-    if (!ticket) return null;
-    ticket.status = 'called';
-    ticket.desk = cleanText(desk, 80);
-    ticket.calledAt = new Date().toISOString();
-    ticket.updatedAt = ticket.calledAt;
-    state[queueId] = items;
-    await this.#save(state);
-    return ticket;
+    return withFileLock(this.filePath, async () => {
+      const state = await this.#load();
+      const items = Array.isArray(state[queueId]) ? state[queueId] : [];
+      const ticket = items.find(item => item.status === 'waiting');
+      if (!ticket) return null;
+      ticket.status = 'called';
+      ticket.desk = cleanText(desk, 80);
+      ticket.calledAt = new Date().toISOString();
+      ticket.updatedAt = ticket.calledAt;
+      state[queueId] = items;
+      await this.#save(state);
+      return ticket;
+    });
   }
 
   async complete(queue, ticketId) {
     const queueId = validateQueue(queue);
     const id = String(ticketId || '').trim();
     if (!id) throw new Error('ticket id is required');
-    const state = await this.#load();
-    const items = Array.isArray(state[queueId]) ? state[queueId] : [];
-    const ticket = items.find(item => item.id === id);
-    if (!ticket) return null;
-    ticket.status = 'completed';
-    ticket.completedAt = new Date().toISOString();
-    ticket.updatedAt = ticket.completedAt;
-    state[queueId] = items;
-    await this.#save(state);
-    return ticket;
+    return withFileLock(this.filePath, async () => {
+      const state = await this.#load();
+      const items = Array.isArray(state[queueId]) ? state[queueId] : [];
+      const ticket = items.find(item => item.id === id);
+      if (!ticket) return null;
+      ticket.status = 'completed';
+      ticket.completedAt = new Date().toISOString();
+      ticket.updatedAt = ticket.completedAt;
+      state[queueId] = items;
+      await this.#save(state);
+      return ticket;
+    });
   }
 
   async reset(queue) {
     const queueId = validateQueue(queue);
-    const state = await this.#load();
-    state[queueId] = [];
-    await this.#save(state);
-    return [];
+    return withFileLock(this.filePath, async () => {
+      const state = await this.#load();
+      state[queueId] = [];
+      await this.#save(state);
+      return [];
+    });
   }
 
   async #load() {
@@ -91,10 +101,19 @@ class QueueStore {
 
   async #save(state) {
     await fs.mkdir(this.dataDir, { recursive: true });
-    const temp = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
-    await fs.writeFile(temp, JSON.stringify(state, null, 2), 'utf8');
+    const temp = `${this.filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+    await fs.writeFile(temp, JSON.stringify(state, null, 2), { encoding: 'utf8', mode: 0o600 });
     await fs.rename(temp, this.filePath);
   }
+}
+
+function withFileLock(filePath, operation) {
+  const previous = fileLocks.get(filePath) || Promise.resolve();
+  const current = previous.then(operation, operation);
+  fileLocks.set(filePath, current.catch(() => {}));
+  return current.finally(() => {
+    if (fileLocks.get(filePath) === current) fileLocks.delete(filePath);
+  });
 }
 
 function validateQueue(value) {
@@ -113,4 +132,4 @@ function cleanText(value, limit) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, limit);
 }
 
-module.exports = { QueueStore, validateQueue, validatePrefix };
+module.exports = { QueueStore, validateQueue, validatePrefix, withFileLock };
