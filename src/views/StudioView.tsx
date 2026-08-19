@@ -25,7 +25,8 @@ export default function StudioView() {
   const [xiboBridgeMessage, setXiboBridgeMessage] = useState('');
 
   const playerUrl = useMemo(() => playerToken ? `${window.location.origin}/player/${playerToken}` : '', [playerToken]);
-  const headline = scene.items.find(item => item.type === 'text' && item.id === 'headline')?.type === 'text' ? scene.items.find(item => item.type === 'text' && item.id === 'headline')?.text || '' : '';
+  const headlineItem = scene.items.find(item => item.type === 'text' && item.id === 'headline');
+  const headline = headlineItem?.type === 'text' ? headlineItem.text : '';
 
   useEffect(() => {
     let disposed = false;
