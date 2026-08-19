@@ -1,0 +1,32 @@
+name: Bootstrap v2.0.0 Stable Tag
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Create initial stable tag once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version=$(node -p "require('./release.config.json').stableVersion")
+          tag="v$version"
+          if git rev-parse "$tag" >/dev/null 2>&1; then echo "$tag already exists"; exit 0; fi
+          test "$(node -p \"require('./package.json').version\")" = "$version"
+          git config user.name 'Open Signage Release Bot'
+          git config user.email 'release-bot@users.noreply.github.com'
+          git tag -a "$tag" -m "Open Signage Plus $tag"
+          git push origin "$tag"
+          gh release create "$tag" --latest --generate-notes --title "Open Signage Plus $tag"
