@@ -3,17 +3,41 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { latestBackupStatus, tlsExpiryStatus, diskStatus } = require('../src/operational-health');
 
-test('latest backup status distinguishes fresh and stale backups', () => {
+function writeBackup(root, name = 'open-signage-plus-test.tar.gz', contents = 'backup') {
+  const file = path.join(root, name);
+  fs.writeFileSync(file, contents);
+  const hash = crypto.createHash('sha256').update(contents).digest('hex');
+  fs.writeFileSync(`${file}.sha256`, `${hash}  ${name}\n`);
+  return file;
+}
+
+test('latest backup status distinguishes fresh and stale verified backups', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'osp-backup-health-'));
   try {
-    const file = path.join(root, 'open-signage-plus-test.tar.gz');
-    fs.writeFileSync(file, 'backup');
+    const file = writeBackup(root);
     const now = Date.now();
     fs.utimesSync(file, new Date(now - 2 * 3600_000), new Date(now - 2 * 3600_000));
     assert.equal(latestBackupStatus({ backupRoot: root, now, maxAgeHours: 24 }).ok, true);
     assert.equal(latestBackupStatus({ backupRoot: root, now, maxAgeHours: 1 }).ok, false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('backup without checksum or with a bad checksum is unhealthy', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'osp-backup-integrity-'));
+  try {
+    const noChecksum = path.join(root, 'open-signage-plus-no-checksum.tar.gz');
+    fs.writeFileSync(noChecksum, 'backup');
+    let status = latestBackupStatus({ backupRoot: root, now: Date.now(), maxAgeHours: 24 });
+    assert.equal(status.ok, false);
+    assert.equal(status.reason, 'checksum-missing');
+
+    fs.writeFileSync(`${noChecksum}.sha256`, `${'0'.repeat(64)}  ${path.basename(noChecksum)}\n`);
+    status = latestBackupStatus({ backupRoot: root, now: Date.now(), maxAgeHours: 24 });
+    assert.equal(status.ok, false);
+    assert.equal(status.reason, 'checksum-mismatch');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
