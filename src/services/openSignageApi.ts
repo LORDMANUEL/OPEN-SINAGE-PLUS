@@ -26,17 +26,30 @@ export interface LoginResult { token: string; user: SessionUser; expiresAt: numb
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const SESSION_KEY = 'open-signage-admin-session';
 
-function sessionToken() { return typeof localStorage !== 'undefined' ? localStorage.getItem(SESSION_KEY) || '' : ''; }
-function authHeaders() { const token = sessionToken(); return token ? { Authorization: `Bearer ${token}` } : {}; }
+function sessionToken() {
+  return typeof localStorage !== 'undefined' ? localStorage.getItem(SESSION_KEY) || '' : '';
+}
+
+function buildHeaders(init?: RequestInit, jsonBody = false): Headers {
+  const headers = new Headers(init?.headers);
+  headers.set('Accept', 'application/json');
+  const token = sessionToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (jsonBody) headers.set('Content-Type', 'application/json');
+  return headers;
+}
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const isJsonBody = typeof init?.body === 'string';
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: { Accept: 'application/json', ...authHeaders(), ...(init?.body && typeof init.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...(init?.headers || {}) },
+    headers: buildHeaders(init, isJsonBody),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && path !== '/api/auth/login') localStorage.removeItem(SESSION_KEY);
+    if (response.status === 401 && path !== '/api/auth/login' && typeof localStorage !== 'undefined') {
+      localStorage.removeItem(SESSION_KEY);
+    }
     const message = typeof payload?.message === 'string' ? payload.message : `Open Signage API error ${response.status}`;
     throw new Error(message);
   }
@@ -44,9 +57,15 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function uploadBinary(file: File, name?: string, tags?: string): Promise<XiboMedia[]> {
+  const headers = buildHeaders();
+  headers.set('Content-Type', file.type || 'application/octet-stream');
+  headers.set('X-File-Name', file.name);
+  if (name) headers.set('X-Media-Name', name);
+  if (tags) headers.set('X-Media-Tags', tags);
+
   const response = await fetch(`${API_BASE}/api/xibo/library/upload`, {
     method: 'POST',
-    headers: { Accept: 'application/json', ...authHeaders(), 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': file.name, ...(name ? { 'X-Media-Name': name } : {}), ...(tags ? { 'X-Media-Tags': tags } : {}) },
+    headers,
     body: file,
   });
   const payload = await response.json().catch(() => ({}));
