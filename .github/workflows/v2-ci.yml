@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: node --test tests/release-policy.test.mjs tests/release-cli.test.mjs tests/release-config.test.mjs tests/sync-lock-metadata.test.mjs tests/release-workflow-static.test.mjs
+      - run: node --test tests/release-policy.test.mjs tests/release-cli.test.mjs tests/release-config.test.mjs tests/sync-lock-metadata.test.mjs tests/release-workflow-static.test.mjs tests/env-set.test.mjs
 
   lifecycle:
     name: lifecycle
@@ -32,6 +32,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+      - name: Wizard TLS/LAN configuration paths
+        run: bash scripts/setup-wizard-selftest.sh
       - name: Backup → verify → destructive change → restore → health
         run: bash scripts/lifecycle-selftest.sh
       - name: Upgrade → health → failed upgrade → rollback
@@ -103,10 +105,13 @@ jobs:
           bash -n scripts/verify-backup.sh
           bash -n scripts/lifecycle-selftest.sh
           bash -n scripts/update-selftest.sh
+          bash -n scripts/setup-wizard.sh
+          bash -n scripts/setup-wizard-selftest.sh
       - name: Validate Docker Compose V2 stack
         run: |
           cp .env.example .env.ci
           docker compose --env-file .env.ci -f docker-compose.v2.yml config >/dev/null
+          docker compose --env-file .env.ci -f docker-compose.v2.yml -f docker-compose.tls.yml --profile tls config >/dev/null
       - name: Validate nginx config
         run: docker run --rm --add-host open-signage-api:127.0.0.1 -v "$PWD/deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine nginx -t
       - name: Build production backend image
