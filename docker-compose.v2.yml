@@ -53,11 +53,19 @@ services:
       - "8081:80"
     restart: unless-stopped
 
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    volumes:
+      - ./shared/ollama:/root/.ollama
+    restart: unless-stopped
+
   open-signage-api:
     build:
       context: ./packages/backend
     depends_on:
       - cms-web
+      - cms-quickchart
     volumes:
       - ./shared/open-signage:/data
     environment:
@@ -67,6 +75,13 @@ services:
       XIBO_CLIENT_ID: ${XIBO_CLIENT_ID}
       XIBO_CLIENT_SECRET: ${XIBO_CLIENT_SECRET}
       XIBO_TIMEOUT_MS: ${XIBO_TIMEOUT_MS:-10000}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-60000}
+      QUICKCHART_BASE_URL: ${QUICKCHART_BASE_URL:-http://cms-quickchart:3400}
+      QR_TIMEOUT_MS: ${QR_TIMEOUT_MS:-10000}
     restart: unless-stopped
 
   open-signage-web:
