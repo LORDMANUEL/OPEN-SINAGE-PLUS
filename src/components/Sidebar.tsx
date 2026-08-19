@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from 'react';
-import { BarChart3, Home, LogOut, Menu, Monitor, PlugZap, Settings, Smartphone, X } from 'lucide-react';
+import { BarChart3, Home, Image, LayoutTemplate, LogOut, Menu, Monitor, PlugZap, Settings, Smartphone, X } from 'lucide-react';
 import { useAppContext } from '../context/app-context';
 
 type SidebarProps = { currentView: string; setCurrentView: (view: string) => void };
@@ -10,6 +10,8 @@ export default function Sidebar({ currentView, setCurrentView }: SidebarProps) {
   const [open, setOpen] = useState(true);
   const items: MenuItem[] = [
     { id: 'dashboard', icon: Home, label: 'Inicio' },
+    { id: 'studio', icon: LayoutTemplate, label: 'Studio' },
+    { id: 'media', icon: Image, label: 'Media' },
     { id: 'integration', icon: PlugZap, label: 'Motor Xibo' },
     { id: 'signage', icon: Monitor, label: 'Pantallas', count: screens.signage.length },
     { id: 'kiosk', icon: Smartphone, label: 'Kioscos', count: screens.kiosk.length },
