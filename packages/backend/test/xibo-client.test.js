@@ -137,7 +137,7 @@ test('createWebpageWidget adds and configures a Xibo webpage widget for a PLUS p
       return new Response(JSON.stringify({ widgetId: 501, type: 'webpage' }), { status: 201, headers: { 'content-type': 'application/json' } });
     }
     if (url.endsWith('/api/playlist/widget/501')) {
-      return new Response('', { status: 204 });
+      return new Response(null, { status: 204 });
     }
     throw new Error(`Unexpected URL ${url}`);
   });
