@@ -10,6 +10,7 @@ export default function PlayerScreen({ token }: { token: string }) {
   const [actionError, setActionError] = useState('');
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const retryMs = useRef(5000);
+  const offlineRef = useRef(false);
   const cacheKey = useMemo(() => `open-signage-player:v2:${token}`, [token]);
 
   useEffect(() => {
@@ -33,10 +34,12 @@ export default function PlayerScreen({ token }: { token: string }) {
     }
 
     async function load() {
+      let delay = 10_000;
       try {
         const next = await openSignageApi.getPlayerScene(token);
         if (disposed) return;
         setScene(next);
+        offlineRef.current = false;
         setOffline(false);
         setLastSyncAt(Date.now());
         retryMs.current = 5000;
@@ -45,10 +48,12 @@ export default function PlayerScreen({ token }: { token: string }) {
         if (disposed) return;
         const cached = loadCached();
         if (cached) setScene(cached);
+        offlineRef.current = true;
         setOffline(true);
         retryMs.current = Math.min(60_000, Math.round(retryMs.current * 1.7));
+        delay = retryMs.current;
       } finally {
-        if (!disposed) timer = window.setTimeout(() => void load(), offline ? retryMs.current : 10_000);
+        if (!disposed) timer = window.setTimeout(() => void load(), delay);
       }
     }
 
@@ -56,16 +61,16 @@ export default function PlayerScreen({ token }: { token: string }) {
     if (cached) setScene(cached);
     void load();
     return () => { disposed = true; if (timer) window.clearTimeout(timer); };
-  }, [cacheKey, token, offline]);
+  }, [cacheKey, token]);
 
   useEffect(() => {
     if (!scene) return;
     const watchdog = window.setInterval(() => {
       const staleFor = lastSyncAt ? Date.now() - lastSyncAt : 0;
-      if (!offline && staleFor > 15 * 60_000 && navigator.onLine) window.location.reload();
+      if (!offlineRef.current && staleFor > 15 * 60_000 && navigator.onLine) window.location.reload();
     }, 60_000);
     return () => window.clearInterval(watchdog);
-  }, [lastSyncAt, offline, scene]);
+  }, [lastSyncAt, scene]);
 
   async function runAction(action: PlayerAction) {
     setActionError('');
