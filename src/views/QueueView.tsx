@@ -26,7 +26,10 @@ export default function QueueView() {
   }
   function announce(ticket: Ticket) {
     if (!voiceEnabled || !('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return;
-    const text = `Turno ${spellTicket(ticket.number)}, pasar a ${ticket.desk || desk}`;
+    const spokenTicket = spellTicket(ticket.number);
+    const text = spokenTicket === ticket.number
+      ? `Turno ${ticket.number}, pasar a ${ticket.desk || desk}`
+      : `Turno ${ticket.number}. ${spokenTicket}, pasar a ${ticket.desk || desk}`;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = voiceLang;
     utterance.rate = 0.9;
