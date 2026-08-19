@@ -9,6 +9,10 @@ on:
       - main
       - feat-refactor-digital-signage-app
 
+concurrency:
+  group: open-signage-v2-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
