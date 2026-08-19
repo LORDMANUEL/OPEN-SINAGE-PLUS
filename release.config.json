@@ -1,0 +1,6 @@
+{
+  "stableVersion": "2.0.0",
+  "nextVersion": "2.1.0",
+  "alphasPerBeta": 5,
+  "betasPerStable": 3
+}
