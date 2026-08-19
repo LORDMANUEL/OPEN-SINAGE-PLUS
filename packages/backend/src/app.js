@@ -3,7 +3,7 @@ const cors = require('cors');
 
 const MAX_MEDIA_BYTES = 200 * 1024 * 1024;
 
-function createApp({ xiboClient, sceneStore = null }) {
+function createApp({ xiboClient, sceneStore = null, aiService = null, queueStore = null, qrService = null }) {
   if (!xiboClient) throw new Error('xiboClient is required');
 
   const app = express();
@@ -67,18 +67,10 @@ function createApp({ xiboClient, sceneStore = null }) {
       const contentType = req.get('content-type') || 'application/octet-stream';
 
       if (!fileName) return res.status(400).json({ error: 'INVALID_MEDIA', message: 'x-file-name header is required' });
-      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-        return res.status(400).json({ error: 'INVALID_MEDIA', message: 'binary file body is required' });
-      }
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'INVALID_MEDIA', message: 'binary file body is required' });
 
       try {
-        const media = await xiboClient.uploadMedia({
-          bytes: req.body,
-          fileName,
-          contentType,
-          name,
-          tags,
-        });
+        const media = await xiboClient.uploadMedia({ bytes: req.body, fileName, contentType, name, tags });
         return res.status(201).json({ media: Array.isArray(media) ? media : [media] });
       } catch (error) {
         return xiboError(res, error);
@@ -88,9 +80,7 @@ function createApp({ xiboClient, sceneStore = null }) {
 
   app.post('/api/xibo/layouts/:layoutId/publish', async (req, res) => {
     const layoutId = Number(req.params.layoutId);
-    if (!Number.isInteger(layoutId) || layoutId <= 0) {
-      return res.status(400).json({ error: 'INVALID_LAYOUT', message: 'layoutId must be a positive integer' });
-    }
+    if (!Number.isInteger(layoutId) || layoutId <= 0) return res.status(400).json({ error: 'INVALID_LAYOUT', message: 'layoutId must be a positive integer' });
     try {
       const layout = await xiboClient.publishLayout(layoutId);
       return res.json({ layout });
@@ -102,17 +92,84 @@ function createApp({ xiboClient, sceneStore = null }) {
   app.post('/api/xibo/schedules', async (req, res) => {
     const payload = req.body || {};
     if (!payload.layoutId || !payload.eventTypeId || !payload.displayGroupIds) {
-      return res.status(400).json({
-        error: 'INVALID_SCHEDULE',
-        message: 'layoutId, eventTypeId and displayGroupIds are required',
-      });
+      return res.status(400).json({ error: 'INVALID_SCHEDULE', message: 'layoutId, eventTypeId and displayGroupIds are required' });
     }
-
     try {
       const event = await xiboClient.createSchedule(payload);
       return res.status(201).json({ event });
     } catch (error) {
       return xiboError(res, error);
+    }
+  });
+
+  app.get('/api/ai/status', (_req, res) => {
+    return res.json(aiService ? aiService.status() : { configured: false, provider: null, model: null });
+  });
+
+  app.post('/api/ai/generate-scene', async (req, res) => {
+    if (!aiService) return res.status(503).json({ error: 'AI_UNAVAILABLE', message: 'AI service is not configured' });
+    const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+    if (!prompt) return res.status(400).json({ error: 'INVALID_PROMPT', message: 'prompt is required' });
+    try {
+      const scene = await aiService.generateScene(prompt);
+      return res.json({ scene });
+    } catch (error) {
+      return res.status(502).json({ error: 'AI_GENERATION_FAILED', message: sanitizeError(error) });
+    }
+  });
+
+  app.get('/api/qr', async (req, res) => {
+    if (!qrService) return res.status(503).json({ error: 'QR_UNAVAILABLE' });
+    const value = String(req.query.value || '').trim();
+    if (!value) return res.status(400).json({ error: 'INVALID_QR', message: 'value is required' });
+    try {
+      const rendered = await qrService.render(value);
+      res.set('Content-Type', rendered.contentType);
+      res.set('Cache-Control', 'public, max-age=300');
+      return res.send(rendered.bytes);
+    } catch (error) {
+      return res.status(502).json({ error: 'QR_RENDER_FAILED', message: sanitizeError(error) });
+    }
+  });
+
+  app.post('/api/queues/:queue/tickets', async (req, res) => {
+    if (!queueStore) return res.status(503).json({ error: 'QUEUE_UNAVAILABLE' });
+    try {
+      const ticket = await queueStore.issue({ queue: req.params.queue, prefix: req.body?.prefix || 'A', customerName: req.body?.customerName || '' });
+      return res.status(201).json({ ticket });
+    } catch (error) {
+      return res.status(400).json({ error: 'INVALID_TICKET', message: sanitizeError(error) });
+    }
+  });
+
+  app.get('/api/queues/:queue', async (req, res) => {
+    if (!queueStore) return res.status(503).json({ error: 'QUEUE_UNAVAILABLE' });
+    try {
+      return res.json({ tickets: await queueStore.list(req.params.queue) });
+    } catch (error) {
+      return res.status(400).json({ error: 'INVALID_QUEUE', message: sanitizeError(error) });
+    }
+  });
+
+  app.post('/api/queues/:queue/call-next', async (req, res) => {
+    if (!queueStore) return res.status(503).json({ error: 'QUEUE_UNAVAILABLE' });
+    try {
+      const ticket = await queueStore.callNext(req.params.queue, { desk: req.body?.desk || '' });
+      if (!ticket) return res.status(404).json({ error: 'NO_WAITING_TICKETS' });
+      return res.json({ ticket });
+    } catch (error) {
+      return res.status(400).json({ error: 'INVALID_QUEUE', message: sanitizeError(error) });
+    }
+  });
+
+  app.post('/api/queues/:queue/tickets/:ticketId/complete', async (req, res) => {
+    if (!queueStore) return res.status(503).json({ error: 'QUEUE_UNAVAILABLE' });
+    try {
+      const ticket = await queueStore.complete(req.params.queue, req.params.ticketId);
+      if (!ticket) return res.status(404).json({ error: 'TICKET_NOT_FOUND' });
+      return res.json({ ticket });
+    } catch (error) {
+      return res.status(400).json({ error: 'INVALID_QUEUE', message: sanitizeError(error) });
     }
   });
 
@@ -150,9 +207,7 @@ function createApp({ xiboClient, sceneStore = null }) {
   });
 
   app.use((error, _req, res, next) => {
-    if (error?.type === 'entity.too.large') {
-      return res.status(413).json({ error: 'MEDIA_TOO_LARGE', message: `Media exceeds ${MAX_MEDIA_BYTES} bytes` });
-    }
+    if (error?.type === 'entity.too.large') return res.status(413).json({ error: 'MEDIA_TOO_LARGE', message: `Media exceeds ${MAX_MEDIA_BYTES} bytes` });
     return next(error);
   });
 
@@ -182,7 +237,9 @@ function xiboError(res, error) {
 
 function sanitizeError(error) {
   const message = error instanceof Error ? error.message : 'Unknown integration error';
-  return message.replace(/(client_secret|access_token)=([^&\s]+)/gi, '$1=[redacted]');
+  return message
+    .replace(/(client_secret|access_token)=([^&\s]+)/gi, '$1=[redacted]')
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]');
 }
 
 module.exports = { createApp, sanitizeError, cleanHeader, MAX_MEDIA_BYTES };
