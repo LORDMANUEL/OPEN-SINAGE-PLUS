@@ -48,9 +48,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && path !== '/api/auth/login' && typeof localStorage !== 'undefined') {
-      localStorage.removeItem(SESSION_KEY);
-    }
+    if (response.status === 401 && path !== '/api/auth/login' && typeof localStorage !== 'undefined') localStorage.removeItem(SESSION_KEY);
     const message = typeof payload?.message === 'string' ? payload.message : `Open Signage API error ${response.status}`;
     throw new Error(message);
   }
@@ -63,12 +61,7 @@ async function uploadBinary(file: File, name?: string, tags?: string): Promise<X
   headers.set('X-File-Name', file.name);
   if (name) headers.set('X-Media-Name', name);
   if (tags) headers.set('X-Media-Tags', tags);
-
-  const response = await fetch(`${API_BASE}/api/xibo/library/upload`, {
-    method: 'POST',
-    headers,
-    body: file,
-  });
+  const response = await fetch(`${API_BASE}/api/xibo/library/upload`, { method: 'POST', headers, body: file });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(typeof payload?.message === 'string' ? payload.message : `Upload error ${response.status}`);
   return Array.isArray(payload.media) ? payload.media as XiboMedia[] : [];
@@ -100,6 +93,7 @@ export const openSignageApi = {
   updatePlayerScene: (token: string, scene: PlayerScene) => apiRequest<{ scene: PlayerScene }>(`/api/player/scenes/${encodeURIComponent(token)}`, { method: 'PUT', body: JSON.stringify(scene) }),
   getPlayerScene: async (token: string) => (await apiRequest<{ scene: PlayerScene }>(`/api/player/scenes/${encodeURIComponent(token)}`)).scene,
   registerDevice: async () => (await apiRequest<{ device: PlayerDevice }>('/api/player/devices/register', { method: 'POST', body: '{}' })).device,
+  listDevices: async () => (await apiRequest<{ devices: PlayerDevice[] }>('/api/player/devices')).devices,
   getDevice: async (deviceToken: string) => (await apiRequest<{ device: PlayerDevice }>(`/api/player/devices/${encodeURIComponent(deviceToken)}`)).device,
   pairDevice: async (pairingCode: string, sceneToken: string, name = '') => (await apiRequest<{ device: PlayerDevice }>('/api/player/devices/pair', { method: 'POST', body: JSON.stringify({ pairingCode, sceneToken, name }) })).device,
   aiStatus: () => apiRequest<AiStatus>('/api/ai/status'),
