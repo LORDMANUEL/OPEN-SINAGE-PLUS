@@ -6,9 +6,12 @@ archive="${1:-}"
 ENV_FILE="${ENV_FILE:-.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.v2.yml}"
 [[ -n "$archive" && -f "$archive" ]] || { echo "Usage: $0 <backup.tar.gz>" >&2; exit 1; }
-[[ -f "$archive.sha256" ]] && sha256sum -c "$archive.sha256"
+if [[ -f "$archive.sha256" ]]; then
+  expected_hash="$(awk 'NR==1 {print $1}' "$archive.sha256")"
+  actual_hash="$(sha256sum "$archive" | awk '{print $1}')"
+  [[ -n "$expected_hash" && "$expected_hash" == "$actual_hash" ]] || { echo 'ERROR: backup archive checksum mismatch' >&2; exit 2; }
+fi
 
-# Reject absolute paths, parent traversal and device-like entries before extraction.
 while IFS= read -r entry; do
   clean="${entry#./}"
   [[ -n "$clean" ]] || continue
