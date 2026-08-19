@@ -46,7 +46,7 @@ if [[ -f "$work/open-signage.tar" ]]; then rm -rf "$SHARED_ROOT/open-signage"; t
 if [[ -f "$work/xibo-library.tar" ]]; then rm -rf "$SHARED_ROOT/cms/library"; mkdir -p "$SHARED_ROOT/cms"; tar --no-same-owner --no-same-permissions -C "$SHARED_ROOT/cms" -xf "$work/xibo-library.tar"; fi
 if [[ -f "$work/xibo-custom.tar" ]]; then rm -rf "$SHARED_ROOT/cms/custom"; mkdir -p "$SHARED_ROOT/cms"; tar --no-same-owner --no-same-permissions -C "$SHARED_ROOT/cms" -xf "$work/xibo-custom.tar"; fi
 
-# RESTORE_RUNNER is injected by lifecycle-selftest; production defaults to Docker Compose.
+# RESTORE_RUNNER is a test seam only; production defaults to Docker Compose.
 run_compose() {
   if [[ -n "${RESTORE_RUNNER:-}" ]]; then "$RESTORE_RUNNER" "$@"; else docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; fi
 }
@@ -62,9 +62,7 @@ done
 run_compose up -d --build
 
 for _ in $(seq 1 60); do
-  if [[ -n "${RESTORE_HEALTH_COMMAND:-}" ]]; then
-    if bash -c "$RESTORE_HEALTH_COMMAND"; then printf 'Restore completed and health verified from %s\n' "$archive"; exit 0; fi
-  elif curl --fail --silent --max-time 3 "$HEALTH_URL" | grep -q '"status":"ok"'; then
+  if curl --fail --silent --max-time 3 "$HEALTH_URL" | grep -q '"status":"ok"'; then
     printf 'Restore completed and health verified from %s\n' "$archive"
     exit 0
   fi
