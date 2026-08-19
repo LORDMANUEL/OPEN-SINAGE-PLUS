@@ -6,32 +6,39 @@ ENV_FILE="${ENV_FILE:-.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.v2.yml}"
 WEB_URL="${WEB_URL:-http://127.0.0.1:8080}"
 XIBO_URL="${XIBO_URL:-http://127.0.0.1:8081}"
-BACKUP_ROOT="${BACKUP_ROOT:-shared/backups}"
-DISK_FREE_WARN_PERCENT="${DISK_FREE_WARN_PERCENT:-10}"
-BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-30}"
-TLS_EXPIRY_WARN_DAYS="${TLS_EXPIRY_WARN_DAYS:-21}"
+BACKUP_ROOT="${BACKUP_ROOT:-}"
+DISK_FREE_WARN_PERCENT="${DISK_FREE_WARN_PERCENT:-}"
+BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-}"
+TLS_EXPIRY_WARN_DAYS="${TLS_EXPIRY_WARN_DAYS:-}"
+DOMAIN="${DOMAIN:-}"
 FAILURES=0
 WARNINGS=0
 
 ok() { printf '[OK] %s\n' "$*"; }
 warn() { printf '[WARN] %s\n' "$*"; WARNINGS=$((WARNINGS + 1)); }
 fail() { printf '[FAIL] %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
+env_value() { node scripts/env-read.mjs "$ENV_FILE" "$1" 2>/dev/null || true; }
+load_if_empty() { local key="$1"; if [[ -z "${!key:-}" ]]; then printf -v "$key" '%s' "$(env_value "$key")"; fi; }
 
 printf 'Open Signage Plus doctor\n========================\n'
 
 command -v docker >/dev/null 2>&1 && ok "Docker disponible: $(docker --version | head -n1)" || fail 'Docker no está instalado o no está en PATH'
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then ok "Docker Compose disponible: $(docker compose version --short 2>/dev/null || docker compose version)"; else fail 'Docker Compose v2 no está disponible'; fi
 command -v curl >/dev/null 2>&1 && ok 'curl disponible' || fail 'curl no está instalado'
+command -v node >/dev/null 2>&1 && ok 'Node disponible para lectura segura de .env' || fail 'Node no está instalado; env-read no puede ejecutarse'
 
 if [[ -f "$ENV_FILE" ]]; then
   ok "$ENV_FILE existe"
   mode="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || true)"
   [[ "$mode" == '600' || "$mode" == '640' ]] && ok "$ENV_FILE tiene permisos restringidos ($mode)" || warn "$ENV_FILE debería tener permisos 600/640; actual: ${mode:-desconocido}"
-  set -a; . "$ENV_FILE"; set +a
+
+  # Read dotenv as data; never `source` credentials into the shell parser.
+  for key in MYSQL_PASSWORD ADMIN_EMAIL ADMIN_PASSWORD SESSION_SECRET XIBO_CLIENT_ID XIBO_CLIENT_SECRET DOMAIN BACKUP_ROOT DISK_FREE_WARN_PERCENT BACKUP_MAX_AGE_HOURS TLS_EXPIRY_WARN_DAYS; do load_if_empty "$key"; done
   DISK_FREE_WARN_PERCENT="${DISK_FREE_WARN_PERCENT:-10}"
   BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-30}"
   TLS_EXPIRY_WARN_DAYS="${TLS_EXPIRY_WARN_DAYS:-21}"
   BACKUP_ROOT="${BACKUP_ROOT:-shared/backups}"
+
   for key in MYSQL_PASSWORD ADMIN_EMAIL ADMIN_PASSWORD SESSION_SECRET; do
     [[ -n "${!key:-}" ]] && ok "$key configurado" || fail "$key falta en $ENV_FILE"
   done
@@ -90,10 +97,10 @@ else
 fi
 
 if command -v systemctl >/dev/null 2>&1; then
-  if systemctl is-enabled open-signage-backup.timer >/dev/null 2>&1; then ok 'Backup programado habilitado: open-signage-backup.timer'; else warn 'Backup automático no está habilitado; ejecute scripts/install-backup-timer.sh'; fi
+  if systemctl is-enabled open-signage-plus-backup.timer >/dev/null 2>&1; then ok 'Backup programado habilitado: open-signage-plus-backup.timer'; else warn 'Backup automático no está habilitado; ejecute scripts/install-backup-timer.sh'; fi
 fi
 
-if [[ -n "${DOMAIN:-}" ]]; then
+if [[ -n "$DOMAIN" ]]; then
   if command -v openssl >/dev/null 2>&1; then
     enddate="$(timeout 8 openssl s_client -servername "$DOMAIN" -connect "$DOMAIN:443" </dev/null 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2- || true)"
     if [[ -n "$enddate" ]]; then
