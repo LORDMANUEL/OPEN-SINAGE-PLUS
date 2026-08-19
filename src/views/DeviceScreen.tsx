@@ -9,12 +9,14 @@ const APP_VERSION = '2.1.0';
 export default function DeviceScreen({ initialToken }: { initialToken?: string | null }) {
   const [device, setDevice] = useState<PlayerDevice | null>(null);
   const [error, setError] = useState('');
+  const errorRef = useRef('');
   const reconnectDelay = useRef(4000);
 
   useEffect(() => {
     let disposed = false;
     let pollTimer = 0;
     let heartbeatTimer = 0;
+    const setConnectionError = (value: string) => { errorRef.current = value; if (!disposed) setError(value); };
 
     async function deviceMetadata(currentSceneToken?: string | null) {
       let storageFreeBytes: number | null = null;
@@ -23,16 +25,8 @@ export default function DeviceScreen({ initialToken }: { initialToken?: string |
         const estimate = await navigator.storage?.estimate?.();
         storageQuotaBytes = estimate?.quota ?? null;
         storageFreeBytes = estimate?.quota != null && estimate?.usage != null ? Math.max(0, estimate.quota - estimate.usage) : null;
-      } catch { /* storage estimate is optional */ }
-      return {
-        appVersion: APP_VERSION,
-        resolution: `${window.screen.width}x${window.screen.height}`,
-        orientation: window.screen.width >= window.screen.height ? 'landscape' : 'portrait',
-        storageFreeBytes,
-        storageQuotaBytes,
-        currentSceneToken: currentSceneToken || undefined,
-        lastError: error || '',
-      };
+      } catch { /* optional */ }
+      return { appVersion: APP_VERSION, resolution: `${window.screen.width}x${window.screen.height}`, orientation: window.screen.width >= window.screen.height ? 'landscape' : 'portrait', storageFreeBytes, storageQuotaBytes, currentSceneToken: currentSceneToken || undefined, lastError: errorRef.current };
     }
 
     async function boot() {
@@ -41,59 +35,38 @@ export default function DeviceScreen({ initialToken }: { initialToken?: string |
         let current: PlayerDevice;
         if (token) {
           try { current = await openSignageApi.getDevice(token); }
-          catch { token = ''; current = await openSignageApi.registerDevice(); }
+          catch { current = await openSignageApi.registerDevice(); }
         } else current = await openSignageApi.registerDevice();
         if (disposed) return;
         localStorage.setItem(DEVICE_KEY, current.deviceToken);
         if (window.location.pathname !== `/screen/${current.deviceToken}`) window.history.replaceState({}, '', `/screen/${current.deviceToken}`);
-        setDevice(current);
-        setError('');
-        reconnectDelay.current = 4000;
+        setDevice(current); setConnectionError(''); reconnectDelay.current = 4000;
 
         async function poll() {
           try {
             const next = await openSignageApi.getDevice(current.deviceToken);
-            if (!disposed) { setDevice(next); setError(''); reconnectDelay.current = 4000; }
+            if (!disposed) { setDevice(next); setConnectionError(''); reconnectDelay.current = 4000; }
           } catch {
-            if (!disposed) { setError('Sin conexión con el servidor. Reintentando…'); reconnectDelay.current = Math.min(60_000, reconnectDelay.current * 2); }
-          } finally {
-            if (!disposed) pollTimer = window.setTimeout(() => void poll(), reconnectDelay.current);
-          }
+            if (!disposed) { setConnectionError('Sin conexión con el servidor. Reintentando…'); reconnectDelay.current = Math.min(60_000, reconnectDelay.current * 2); }
+          } finally { if (!disposed) pollTimer = window.setTimeout(() => void poll(), reconnectDelay.current); }
         }
-
         async function heartbeat() {
           try {
-            const metadata = await deviceMetadata(current.sceneToken);
-            const next = await openSignageApi.heartbeatDevice(current.deviceToken, metadata);
+            const latestScene = current.sceneToken;
+            const next = await openSignageApi.heartbeatDevice(current.deviceToken, await deviceMetadata(latestScene));
             if (!disposed) setDevice(previous => ({ ...(previous || next), ...next }));
-          } catch { /* polling surfaces connection state */ }
+          } catch { /* poll owns connectivity UX */ }
           if (!disposed) heartbeatTimer = window.setTimeout(() => void heartbeat(), 15_000);
         }
-
         pollTimer = window.setTimeout(() => void poll(), 4000);
         heartbeatTimer = window.setTimeout(() => void heartbeat(), 1000);
-      } catch (bootError) {
-        if (!disposed) setError(bootError instanceof Error ? bootError.message : 'No se pudo registrar la pantalla');
-      }
+      } catch (bootError) { setConnectionError(bootError instanceof Error ? bootError.message : 'No se pudo registrar la pantalla'); }
     }
 
     void boot();
     return () => { disposed = true; if (pollTimer) window.clearTimeout(pollTimer); if (heartbeatTimer) window.clearTimeout(heartbeatTimer); };
-  }, [initialToken, error]);
+  }, [initialToken]);
 
   if (device?.sceneToken) return <PlayerScreen token={device.sceneToken} />;
-
-  return (
-    <main className="pairing-stage" role="main">
-      <div className="pairing-card">
-        <div className="pairing-logo"><Monitor size={42}/></div>
-        <span className="eyebrow eyebrow--light">OPEN SIGNAGE PLUS</span>
-        <h1>Vincula esta pantalla</h1>
-        <p>En el panel de administración abre <strong>Studio</strong>, publica una escena y escribe este código.</p>
-        <div className="pairing-code" aria-label="Código de vinculación">{device?.pairingCode || '······'}</div>
-        <div className="pairing-status"><Wifi size={17}/><span>{error || 'Esperando asignación…'}</span></div>
-        <small>Esta pantalla conserva su identidad, reporta salud al servidor y no necesita APK.</small>
-      </div>
-    </main>
-  );
+  return <main className="pairing-stage" role="main"><div className="pairing-card"><div className="pairing-logo"><Monitor size={42}/></div><span className="eyebrow eyebrow--light">OPEN SIGNAGE PLUS</span><h1>Vincula esta pantalla</h1><p>En el panel de administración abre <strong>Studio</strong>, publica una escena y escribe este código.</p><div className="pairing-code" aria-label="Código de vinculación">{device?.pairingCode || '······'}</div><div className="pairing-status"><Wifi size={17}/><span>{error || 'Esperando asignación…'}</span></div><small>Esta pantalla conserva su identidad, reporta salud al servidor y no necesita APK.</small></div></main>;
 }
