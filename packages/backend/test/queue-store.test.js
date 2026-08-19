@@ -24,6 +24,21 @@ test('queue store issues sequential tickets and preserves them across instances'
   }
 });
 
+test('queue store serializes concurrent ticket issuance without duplicate sequence numbers', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'osp-queue-'));
+  try {
+    const store = new QueueStore({ dataDir: dir });
+    const issued = await Promise.all(Array.from({ length: 20 }, () => store.issue({ queue: 'recepcion', prefix: 'R' })));
+    const numbers = issued.map(ticket => ticket.number).sort();
+    assert.deepEqual(numbers, Array.from({ length: 20 }, (_, index) => `R${String(index + 1).padStart(3, '0')}`));
+    const persisted = await store.list('recepcion');
+    assert.equal(persisted.length, 20);
+    assert.equal(new Set(persisted.map(ticket => ticket.sequence)).size, 20);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('queue store calls next waiting ticket and can complete it', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'osp-queue-'));
   try {
