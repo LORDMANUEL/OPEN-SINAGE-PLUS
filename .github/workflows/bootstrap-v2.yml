@@ -1,6 +1,7 @@
 name: Bootstrap v2.0.0 Stable Tag
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -23,7 +24,10 @@ jobs:
         run: |
           version=$(node -p "require('./release.config.json').stableVersion")
           tag="v$version"
-          if git rev-parse "$tag" >/dev/null 2>&1; then echo "$tag already exists"; exit 0; fi
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "$tag already exists"
+            exit 0
+          fi
           test "$(node -p \"require('./package.json').version\")" = "$version"
           git config user.name 'Open Signage Release Bot'
           git config user.email 'release-bot@users.noreply.github.com'
