@@ -20,6 +20,18 @@ test('device store registers a persistent browser with a short pairing code', as
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
+test('device store preserves concurrent registrations without lost devices', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'osp-devices-'));
+  try {
+    const store = new DeviceStore({ dataDir: dir });
+    const created = await Promise.all(Array.from({ length: 16 }, (_, index) => store.register({ userAgent: `TV-${index}` })));
+    assert.equal(new Set(created.map(device => device.deviceToken)).size, 16);
+    assert.equal(new Set(created.map(device => device.pairingCode)).size, 16);
+    const persisted = await store.list();
+    assert.equal(persisted.length, 16);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
 test('device store lists persisted browser devices for the admin inventory', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'osp-devices-'));
   try {
