@@ -28,6 +28,22 @@ test('scene store creates a token and persists scenes across instances', async (
   }
 });
 
+test('scene store preserves concurrent scene creation without lost scenes', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'open-signage-scenes-'));
+  try {
+    const store = new SceneStore({ dataDir: dir });
+    const created = await Promise.all(Array.from({ length: 12 }, (_, index) => store.create({
+      name: `Scene ${index + 1}`,
+      items: [{ type: 'text', text: `Item ${index + 1}` }],
+    })));
+    assert.equal(new Set(created.map(entry => entry.token)).size, 12);
+    const loaded = await Promise.all(created.map(entry => store.get(entry.token)));
+    assert.equal(loaded.filter(Boolean).length, 12);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('scene store accepts safe touch buttons and QR items', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'open-signage-scenes-'));
   try {
