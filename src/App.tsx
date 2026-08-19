@@ -15,6 +15,7 @@ import AiStudioView from './views/AiStudioView';
 import QueueView from './views/QueueView';
 import OperationsView from './views/OperationsView';
 import BusinessAdminView from './views/BusinessAdminView';
+import PlanningAnalyticsView from './views/PlanningAnalyticsView';
 import FormScreen from './views/FormScreen';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
       case 'queues': return <QueueView />;
       case 'operations': return <OperationsView />;
       case 'business': return <BusinessAdminView />;
+      case 'planning': return <PlanningAnalyticsView />;
       case 'signage': return <ScreenListView type="signage" title="Pantallas Xibo" />;
       case 'kiosk': return <ScreenListView type="kiosk" title="Kioscos y Browser Players" />;
       case 'dashboards': return <ScreenListView type="dashboard" title="Layouts y Dashboards Xibo" />;
