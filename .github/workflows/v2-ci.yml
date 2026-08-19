@@ -1,24 +1,31 @@
-name: Open Signage Plus V2 CI
+name: Open Signage Plus CI
 
 on:
   push:
-    branches:
-      - main
-      - feat/open-signage-plus-v2-xibo
-      - feat/production-p0-p1
+    branches: [alpha, beta, main]
   pull_request:
-    branches:
-      - main
-      - feat-refactor-digital-signage-app
+    branches: [alpha, beta, main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: open-signage-v2-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: open-signage-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
+  release-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node --test tests/release-policy.test.mjs tests/release-cli.test.mjs tests/release-config.test.mjs
+
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -29,6 +36,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Verify package metadata
+        run: |
+          node - <<'NODE'
+          const p = require('./package.json');
+          const l = require('./package-lock.json');
+          if (p.name !== l.name || p.version !== l.version || p.name !== l.packages[''].name || p.version !== l.packages[''].version) {
+            console.error('package.json and package-lock.json metadata are out of sync');
+            process.exit(1);
+          }
+          NODE
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
@@ -54,7 +71,21 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - run: npm test
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: google-chrome --version
+      - run: npx playwright test --project=chromium
+
   deployment:
+    if: github.ref_name != 'alpha' && github.base_ref != 'alpha'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -89,26 +120,10 @@ jobs:
           cleanup() { docker rm -f open-signage-api-smoke >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error http://127.0.0.1:33000/api/health | grep -q '"status":"ok"'; then
-              exit 0
-            fi
+            if curl --fail --silent --show-error http://127.0.0.1:33000/api/health | grep -q '"status":"ok"'; then exit 0; fi
             sleep 1
           done
           docker logs open-signage-api-smoke
           exit 1
       - name: Build production web image
         run: docker build -f Dockerfile.web -t open-signage-web-ci .
-
-  e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 18
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Verify runner Chrome
-        run: google-chrome --version
-      - run: npx playwright test --project=chromium
