@@ -26,6 +26,15 @@ jobs:
           node-version: 22
       - run: node --test tests/release-policy.test.mjs tests/release-cli.test.mjs tests/release-config.test.mjs tests/sync-lock-metadata.test.mjs tests/release-workflow-static.test.mjs
 
+  lifecycle:
+    name: lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+      - name: Backup → verify → destructive change → restore → health
+        run: bash scripts/lifecycle-selftest.sh
+
   frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -90,6 +99,7 @@ jobs:
           bash -n scripts/update.sh
           bash -n scripts/doctor.sh
           bash -n scripts/verify-backup.sh
+          bash -n scripts/lifecycle-selftest.sh
       - name: Validate Docker Compose V2 stack
         run: |
           cp .env.example .env.ci
