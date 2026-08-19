@@ -3,6 +3,7 @@ name: Open Signage Plus V2 CI
 on:
   push:
     branches:
+      - main
       - feat/open-signage-plus-v2-xibo
   pull_request:
     branches:
