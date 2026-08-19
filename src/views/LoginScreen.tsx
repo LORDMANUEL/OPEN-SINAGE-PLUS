@@ -1,63 +1,39 @@
-import React, { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
+import { useState, type FormEvent } from 'react';
+import { MonitorPlay, ShieldCheck, Sparkles } from 'lucide-react';
+import { useAppContext } from '../context/app-context';
 
-const LoginScreen = () => {
-  const { handleLogin, users } = useAppContext();
+export default function LoginScreen() {
+  const { handleLogin } = useAppContext();
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
 
-  const onLogin = (e) => {
-    e.preventDefault();
+  const onLogin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     handleLogin(loginForm.email, loginForm.password);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="text-6xl mb-4">🖥️</div>
-          <h1 className="text-4xl font-bold text-white mb-2">Digital Signage PRO</h1>
-          <p className="text-purple-200">Sistema Enterprise con IA</p>
+    <div className="login-page">
+      <section className="login-hero">
+        <div className="brand-mark"><MonitorPlay size={31} /></div>
+        <span className="eyebrow eyebrow--light">OPEN SIGNAGE PLUS</span>
+        <h1>Señalización digital simple por fuera. Potente por dentro.</h1>
+        <p>Xibo como motor, nuestra PWA como experiencia, y una capa preparada para IA, QR, tickets, HTML y pantallas táctiles.</p>
+        <div className="login-features">
+          <span><ShieldCheck size={18} /> Credenciales Xibo solo en servidor</span>
+          <span><Sparkles size={18} /> IA local o por API</span>
+          <span><MonitorPlay size={18} /> Navegador primero</span>
         </div>
-        <div className="p-8 rounded-3xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-2xl">
-          <div className="space-y-6">
-            <div>
-              <label className="block text-white font-semibold mb-2">Email</label>
-              <input
-                type="email"
-                value={loginForm.email}
-                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                onKeyPress={(e) => e.key === 'Enter' && onLogin(e)}
-                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:border-white/40 transition-all"
-                placeholder="usuario@empresa.com"
-              />
-            </div>
-            <div>
-              <label className="block text-white font-semibold mb-2">Contraseña</label>
-              <input
-                type="password"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                onKeyPress={(e) => e.key === 'Enter' && onLogin(e)}
-                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/50 focus:outline-none focus:border-white/40 transition-all"
-                placeholder="••••••••"
-              />
-            </div>
-            <button
-              onClick={onLogin}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-lg shadow-lg hover:shadow-xl hover:scale-105 transition-all"
-            >
-              Iniciar Sesión
-            </button>
-          </div>
-          <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
-            <p className="text-white/70 text-sm mb-2">Usuarios de prueba:</p>
-            <p className="text-white text-xs">👨‍💻 Admin IT: admin@empresa.com / admin123</p>
-            <p className="text-white text-xs">👩‍💼 Marketing: marketing@empresa.com / marketing123</p>
-          </div>
-        </div>
-      </div>
+      </section>
+
+      <section className="login-card-wrap">
+        <form onSubmit={onLogin} className="login-card">
+          <div><span className="eyebrow">ACCESO</span><h2>Bienvenido</h2><p>Administra contenido y pantallas desde un solo lugar.</p></div>
+          <label>Email<input id="email" type="email" required autoComplete="username" value={loginForm.email} onChange={event => setLoginForm(current => ({ ...current, email: event.target.value }))} placeholder="usuario@empresa.com" /></label>
+          <label>Contraseña<input id="password" type="password" required autoComplete="current-password" value={loginForm.password} onChange={event => setLoginForm(current => ({ ...current, password: event.target.value }))} placeholder="••••••••" /></label>
+          <button type="submit" className="button button--primary button--wide">Iniciar sesión</button>
+          <div className="demo-box"><strong>Acceso de demostración</strong><span>admin@empresa.com · admin123</span><span>marketing@empresa.com · marketing123</span></div>
+        </form>
+      </section>
     </div>
   );
-};
-
-export default LoginScreen;
+}

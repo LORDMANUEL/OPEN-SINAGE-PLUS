@@ -1,84 +1,47 @@
-import React, { createContext, useState, useContext } from 'react';
+import { useState, type ReactNode } from 'react';
+import { initialMediaLibrary, initialScreens, initialTickets, users } from '../data/mockData';
 import {
-  initialApiKeys,
-  initialMediaLibrary,
-  initialBackups,
-  initialTickets,
-  users,
-} from '../data/mockData';
-import { useEffect } from 'react';
+  AppContext,
+  type AppContextValue,
+  type NotificationRecord,
+  type ScreenRecord,
+  type ScreensState,
+  type ScreenType,
+  type UserRecord,
+} from './app-context';
 
-const AppContext = createContext(null);
+function normalizeInitialScreens(): ScreensState {
+  return {
+    signage: initialScreens.signage as ScreenRecord[],
+    kiosk: initialScreens.kiosk as ScreenRecord[],
+    dashboard: initialScreens.dashboard as ScreenRecord[],
+  };
+}
 
-export const AppProvider = ({ children }) => {
+export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [apiKeys, setApiKeys] = useState(initialApiKeys);
-  const [screens, setScreens] = useState({ signage: [], kiosk: [], dashboard: [] });
-  const [mediaLibrary, setMediaLibrary] = useState(initialMediaLibrary);
-  const [backups, setBackups] = useState(initialBackups);
-  const [tickets, setTickets] = useState(initialTickets);
-  const [notifications, setNotifications] = useState([]);
-  const [selectedScreen, setSelectedScreen] = useState(null);
+  const [currentUser, setCurrentUser] = useState<UserRecord | null>(null);
+  const [screens, setScreens] = useState<ScreensState>(normalizeInitialScreens);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
-  useEffect(() => {
-    const fetchScreens = async () => {
-      try {
-        const response = await fetch('http://localhost:3000/api/screens');
-        const data = await response.json();
-        setScreens(data);
-      } catch (error) {
-        console.error('Error fetching screens:', error);
-      }
-    };
-
-    fetchScreens();
-  }, []);
-
-  const createNewScreen = (type) => {
-    const typeNames = {
-      signage: 'Digital Signage',
-      kiosk: 'Kiosko',
-      dashboard: 'Dashboard'
-    };
-
-    const newScreen = {
-      id: Date.now(),
-      name: `Nueva ${typeNames[type]} ${screens[type].length + 1}`,
-      zone: 'Sin asignar',
-      status: 'offline',
-      orientation: type === 'kiosk' ? 'vertical' : 'horizontal',
-      layout: 'default',
-      lastSync: 'Nunca'
-    };
-
-    setScreens({
-      ...screens,
-      [type]: [...screens[type], newScreen]
-    });
-
-    addNotification('success', `Nueva pantalla creada: ${newScreen.name}`);
+  const notify = (type: NotificationRecord['type'], message: string) => {
+    setNotifications(current => [
+      { id: Date.now(), type, message, time: new Date() },
+      ...current,
+    ].slice(0, 10));
   };
 
-  const deleteScreen = (type, id) => {
-    if (window.confirm('¿Está seguro de eliminar esta pantalla?')) {
-      setScreens({
-        ...screens,
-        [type]: screens[type].filter(s => s.id !== id)
-      });
-      addNotification('success', 'Pantalla eliminada correctamente');
+  const handleLogin = (email: string, password: string) => {
+    const account = users[email as keyof typeof users];
+    if (!account || account.password !== password) {
+      notify('error', 'Credenciales incorrectas');
+      return false;
     }
-  };
 
-  const handleLogin = (email, password) => {
-    const user = users[email];
-    if (user && user.password === password) {
-      setCurrentUser({ ...user, email });
-      setIsLoggedIn(true);
-      addNotification('success', `Sesión iniciada como ${user.name}`);
-    } else {
-      addNotification('error', 'Credenciales incorrectas');
-    }
+    setCurrentUser({ email, ...account } as UserRecord);
+    setIsLoggedIn(true);
+    notify('success', `Sesión iniciada como ${account.name}`);
+    return true;
   };
 
   const handleLogout = () => {
@@ -86,47 +49,45 @@ export const AppProvider = ({ children }) => {
     setCurrentUser(null);
   };
 
-  const addNotification = (type, message) => {
-    const newNotification = {
-      id: Date.now(),
-      type,
-      message,
-      time: new Date(),
+  const createNewScreen = (type: ScreenType) => {
+    const labels: Record<ScreenType, string> = {
+      signage: 'Digital Signage',
+      kiosk: 'Kiosco',
+      dashboard: 'Dashboard',
     };
-    setNotifications([newNotification, ...notifications]);
 
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== newNotification.id));
-    }, 5000);
+    setScreens(current => {
+      const next: ScreenRecord = {
+        id: Date.now(),
+        name: `Nueva ${labels[type]} ${current[type].length + 1}`,
+        zone: 'Sin asignar',
+        status: 'offline',
+        orientation: type === 'kiosk' ? 'vertical' : 'horizontal',
+        layout: 'default',
+        lastSync: 'Nunca',
+      };
+      notify('success', `Pantalla local creada: ${next.name}`);
+      return { ...current, [type]: [...current[type], next] };
+    });
   };
 
-  const value = {
+  const deleteScreen = (type: ScreenType, id: number) => {
+    setScreens(current => ({ ...current, [type]: current[type].filter(screen => screen.id !== id) }));
+    notify('success', 'Pantalla local eliminada');
+  };
+
+  const value: AppContextValue = {
     isLoggedIn,
     currentUser,
-    apiKeys,
     screens,
-    mediaLibrary,
-    backups,
-    tickets,
+    mediaLibrary: initialMediaLibrary,
+    tickets: initialTickets,
     notifications,
-    selectedScreen,
     handleLogin,
     handleLogout,
-    setApiKeys,
-    setScreens,
-    setMediaLibrary,
-    setBackups,
-    setTickets,
-    addNotification,
-    users,
     createNewScreen,
     deleteScreen,
-    setSelectedScreen,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-};
-
-export const useAppContext = () => {
-  return useContext(AppContext);
-};
+}

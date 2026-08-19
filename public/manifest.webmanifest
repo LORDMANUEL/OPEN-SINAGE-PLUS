@@ -1,0 +1,11 @@
+{
+  "name": "Open Signage Plus",
+  "short_name": "OpenSignage+",
+  "description": "Administración y player web para señalización digital sobre Xibo",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "icons": []
+}

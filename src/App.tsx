@@ -1,53 +1,42 @@
-import React, { useState } from 'react';
-import { AppProvider, useAppContext } from './context/AppContext';
+import { useState } from 'react';
+import { AppProvider } from './context/AppContext';
+import { useAppContext } from './context/app-context';
 import LoginScreen from './views/LoginScreen';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import DashboardView from './views/DashboardView';
 import ScreenListView from './views/ScreenListView';
-// Import other views as they are created
+import IntegrationView from './views/IntegrationView';
 
 function App() {
   const { isLoggedIn } = useAppContext();
   const [currentView, setCurrentView] = useState('dashboard');
 
-  if (!isLoggedIn) {
-    return <LoginScreen />;
-  }
+  if (!isLoggedIn) return <LoginScreen />;
 
   const renderContent = () => {
     switch (currentView) {
-      case 'dashboard':
-        return <DashboardView />;
-      case 'signage':
-        return <ScreenListView type="signage" title="Pantallas Digital Signage" />;
-      case 'kiosk':
-        return <ScreenListView type="kiosk" title="Kioscos Interactivos" />;
-      case 'dashboards':
-        return <ScreenListView type="dashboard" title="Dashboards BI" />;
-      // Add cases for other views here
-      default:
-        return <DashboardView />;
+      case 'dashboard': return <DashboardView />;
+      case 'signage': return <ScreenListView type="signage" title="Pantallas Digital Signage" />;
+      case 'kiosk': return <ScreenListView type="kiosk" title="Kioscos Interactivos" />;
+      case 'dashboards': return <ScreenListView type="dashboard" title="Dashboards BI" />;
+      case 'integration':
+      case 'settings': return <IntegrationView />;
+      default: return <DashboardView />;
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="app-shell">
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
-      <div className="flex-1 ml-72 transition-all duration-300">
+      <div className="app-content">
         <TopBar currentView={currentView} />
-        <div className="p-6">
-          {renderContent()}
-        </div>
+        <main className="app-main">{renderContent()}</main>
       </div>
     </div>
   );
 }
 
-const AppWrapper = () => (
-  <AppProvider>
-    <App />
-  </AppProvider>
-);
-
-export default AppWrapper;
+export default function AppWrapper() {
+  return <AppProvider><App /></AppProvider>;
+}

@@ -1,15 +1,16 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "",
+  "name": "open-signage-api",
+  "version": "2.0.0",
+  "description": "Open Signage Plus gateway and orchestration API for Xibo CMS",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "AGPL-3.0-or-later",
   "type": "commonjs",
   "dependencies": {
     "cors": "^2.8.5",
