@@ -3,10 +3,10 @@ import { BarChart3, Bot, Home, Image, LayoutTemplate, ListOrdered, LogOut, Menu,
 import { useAppContext } from '../context/app-context';
 
 type SidebarProps = { currentView: string; setCurrentView: (view: string) => void };
-type MenuItem = { id: string; label: string; icon: ComponentType<{ size?: number }>; count?: number };
+type MenuItem = { id: string; label: string; icon: ComponentType<{ size?: number }> };
 
 export default function Sidebar({ currentView, setCurrentView }: SidebarProps) {
-  const { currentUser, screens, handleLogout } = useAppContext();
+  const { currentUser, handleLogout } = useAppContext();
   const [open, setOpen] = useState(true);
   const items: MenuItem[] = [
     { id: 'dashboard', icon: Home, label: 'Inicio' },
@@ -15,9 +15,9 @@ export default function Sidebar({ currentView, setCurrentView }: SidebarProps) {
     { id: 'media', icon: Image, label: 'Media' },
     { id: 'queues', icon: ListOrdered, label: 'Turnos' },
     { id: 'integration', icon: PlugZap, label: 'Motor Xibo' },
-    { id: 'signage', icon: Monitor, label: 'Pantallas', count: screens.signage.length },
-    { id: 'kiosk', icon: Smartphone, label: 'Kioscos', count: screens.kiosk.length },
-    { id: 'dashboards', icon: BarChart3, label: 'Dashboards', count: screens.dashboard.length },
+    { id: 'signage', icon: Monitor, label: 'Pantallas' },
+    { id: 'kiosk', icon: Smartphone, label: 'Kioscos' },
+    { id: 'dashboards', icon: BarChart3, label: 'Dashboards' },
   ];
 
   return (
@@ -26,9 +26,9 @@ export default function Sidebar({ currentView, setCurrentView }: SidebarProps) {
         {open && <div><strong>Open Signage <span>+</span></strong><small>Xibo engine · PWA</small></div>}
         <button className="icon-button icon-button--ghost" type="button" aria-label="Alternar menú" onClick={() => setOpen(value => !value)}>{open ? <X size={18} /> : <Menu size={18} />}</button>
       </div>
-      {open && currentUser && <div className="sidebar__user"><span>{currentUser.avatar}</span><div><strong>{currentUser.name}</strong><small>{currentUser.role === 'admin_it' ? 'Administrador' : 'Marketing'}</small></div></div>}
+      {open && currentUser && <div className="sidebar__user"><span>{currentUser.avatar}</span><div><strong>{currentUser.name}</strong><small>Administrador</small></div></div>}
       <nav className="sidebar__nav" aria-label="Navegación principal">
-        {items.map(item => <button key={item.id} type="button" title={item.label} className={`sidebar__item ${currentView === item.id ? 'sidebar__item--active' : ''}`} onClick={() => setCurrentView(item.id)}><item.icon size={19} />{open && <><span>{item.label}</span>{item.count !== undefined && <b>{item.count}</b>}</>}</button>)}
+        {items.map(item => <button key={item.id} type="button" title={item.label} className={`sidebar__item ${currentView === item.id ? 'sidebar__item--active' : ''}`} onClick={() => setCurrentView(item.id)}><item.icon size={19} />{open && <span>{item.label}</span>}</button>)}
       </nav>
       <div className="sidebar__footer">
         <button type="button" className="sidebar__item" onClick={() => setCurrentView('settings')}><Settings size={19} />{open && <span>Configuración</span>}</button>
