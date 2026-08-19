@@ -52,7 +52,7 @@ jobs:
           esac
           test "$GITHUB_REF_NAME" = "$expected" || { echo "Run $channel from branch $expected, not $GITHUB_REF_NAME"; exit 1; }
 
-      - name: Verify current commit CI
+      - name: Verify current commit CI and security gates
         shell: bash
         run: |
           gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100" > checks.json
@@ -65,7 +65,7 @@ jobs:
           NODE
         env:
           GH_TOKEN: ${{ github.token }}
-          REQUIRED: ${{ inputs.channel == 'alpha' && '["release-policy","frontend","backend","e2e"]' || '["release-policy","frontend","backend","e2e","deployment"]' }}
+          REQUIRED: ${{ inputs.channel == 'alpha' && '["release-policy","frontend","backend","e2e","security-codeql","security-secrets","security-fs"]' || '["release-policy","frontend","backend","e2e","deployment","security-codeql","security-secrets","security-fs","security-images"]' }}
 
       - name: Cut prerelease tag
         if: inputs.channel != 'stable'
@@ -112,7 +112,7 @@ jobs:
           git add package.json package-lock.json release.config.json
           git commit -m "Prepare Open Signage Plus v$version stable"
           git push origin "$branch"
-          gh pr create --base main --head "$branch" --title "Release Open Signage Plus v$version" --body "Prepared automatically after 3 certified beta releases. Merge only with all stable gates green."
+          gh pr create --base main --head "$branch" --title "Release Open Signage Plus v$version" --body "Prepared automatically after 3 certified beta releases. Merge only with all stable and security gates green."
 
       - name: Cut stable release
         if: inputs.channel == 'stable'
