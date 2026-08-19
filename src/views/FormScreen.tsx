@@ -5,6 +5,7 @@ import { adminPlatformApi, type FormDefinition, type FormField } from '../servic
 export default function FormScreen({ formId }: { formId: string }) {
   const [form, setForm] = useState<FormDefinition | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -16,7 +17,9 @@ export default function FormScreen({ formId }: { formId: string }) {
     setBusy(true); setMessage('');
     try {
       for (const field of form.schema.fields || []) if (field.required && !values[field.name]) throw new Error(`${field.label || field.name} es obligatorio`);
-      await adminPlatformApi.submitPublicForm(form.id, values);
+      if (form.schema.consentRequired && !consentAccepted) throw new Error('Debes aceptar el consentimiento para continuar.');
+      const payload = form.schema.consentRequired ? { ...values, __consent: true } : values;
+      await adminPlatformApi.submitPublicForm(form.id, payload);
       setSubmitted(true);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo enviar'); }
     finally { setBusy(false); }
@@ -26,7 +29,7 @@ export default function FormScreen({ formId }: { formId: string }) {
   if (!form) return <main className="pairing-stage"><div className="pairing-card"><h1>Formulario no disponible</h1><p>{message}</p></div></main>;
   if (submitted) return <main className="pairing-stage"><div className="pairing-card"><CheckCircle2 size={52}/><h1>{form.schema.successMessage || '¡Gracias!'}</h1><p>La respuesta fue registrada correctamente.</p></div></main>;
 
-  return <main className="pairing-stage" style={{ overflowY: 'auto', padding: 24 }}><form className="pairing-card form-grid" style={{ width: 'min(720px, 94vw)', textAlign: 'left' }} onSubmit={submit}><div style={{ textAlign: 'center' }}><ClipboardList size={42}/><h1>{form.name}</h1><p>Completa los campos y pulsa enviar.</p></div>{(form.schema.fields || []).map(field => <Field key={field.name} field={field} value={values[field.name]} onChange={value => setValues(current => ({ ...current, [field.name]: value }))}/>) }{message && <div className="notice notice--error">{message}</div>}<button className="button button--primary" type="submit" disabled={busy}>{busy ? 'Enviando…' : form.schema.submitLabel || 'Enviar'}</button></form></main>;
+  return <main className="pairing-stage" style={{ overflowY: 'auto', padding: 24 }}><form className="pairing-card form-grid" style={{ width: 'min(720px, 94vw)', textAlign: 'left' }} onSubmit={submit}><div style={{ textAlign: 'center' }}><ClipboardList size={42}/><h1>{form.name}</h1><p>Completa los campos y pulsa enviar.</p></div>{(form.schema.fields || []).map(field => <Field key={field.name} field={field} value={values[field.name]} onChange={value => setValues(current => ({ ...current, [field.name]: value }))}/>) }{form.schema.consentRequired && <label className="notice" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}><input aria-label="Aceptar consentimiento" type="checkbox" checked={consentAccepted} onChange={event => setConsentAccepted(event.target.checked)} style={{ width: 24, height: 24, marginTop: 2 }}/><span><strong>Consentimiento requerido</strong><br/>{form.schema.consentText || 'Acepto el tratamiento de mis datos para la finalidad indicada en este formulario.'}</span></label>}{form.schema.retentionDays && <small>Retención configurada: {form.schema.retentionDays} días.</small>}{message && <div className="notice notice--error">{message}</div>}<button className="button button--primary" type="submit" disabled={busy || Boolean(form.schema.consentRequired && !consentAccepted)}>{busy ? 'Enviando…' : form.schema.submitLabel || 'Enviar'}</button></form></main>;
 }
 
 function Field({ field, value, onChange }: { field: FormField; value: unknown; onChange: (value: unknown) => void }) {
