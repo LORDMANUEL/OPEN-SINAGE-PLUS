@@ -1,23 +1,28 @@
 # MASTER — Open Signage Plus
 
-> Fuente maestra de estado, deuda y orden de trabajo para llevar Open Signage Plus de la V2 funcional a una plataforma productiva certificada.
+> Fuente maestra de estado, deuda y orden de trabajo para llevar Open Signage Plus de la V2 funcional a producción certificada. Este archivo se actualiza al cerrar cada bloque; `[x]` requiere evidencia.
 
-**Estable actual:** `2.0.0` · **Rama estable:** `main` · **Motor:** Xibo 4.5 · **UX:** Open Signage Plus PWA/API/Browser Player.
+**Estable actual:** `2.0.0`  
+**Rama estable:** `main`  
+**Canales permanentes:** `alpha` → `beta` → `main`  
+**Siguiente ciclo:** `2.1.0`  
+**Motor:** Xibo 4.5  
+**UX:** Open Signage Plus PWA/API/Browser Player
 
 ## 1. Reglas innegociables
 
-1. `main` recibe solo versiones estables certificadas.
-2. `feature/* → alpha → beta → main`.
-3. 5 alphas verdes habilitan 1 beta; 3 betas verdes habilitan 1 estable.
-4. El contador nunca sustituye CI: una versión roja no se promueve.
+1. `main` recibe únicamente versiones estables certificadas.
+2. Desarrollo normal: `feature/* → alpha → beta → main`.
+3. Cinco alphas verdes habilitan una beta; tres betas verdes habilitan una estable.
+4. El contador no sustituye CI: un tag con gates rojos no se promueve.
 5. Cada cambio pertenece a un módulo de `docs/MODULES.md`.
-6. RBAC del backend es autoridad; ocultar botones no es seguridad.
+6. RBAC backend es autoridad; ocultar un botón en UI no es seguridad.
 7. Secretos Xibo/IA/SMTP nunca llegan al navegador.
-8. Toda persistencia debe tener backup, restore y migración.
+8. Toda persistencia necesita backup, restore y migración.
 9. Browser-first es prioridad; wrappers nativos son opcionales.
 10. Xibo es motor; la experiencia de usuario pertenece a Open Signage Plus.
 
-## 2. Ciclo de releases
+## 2. Release engineering — Fase A
 
 ```text
 feature/*
@@ -34,124 +39,224 @@ feature/*
              ├─ vX.Y.Z-beta.2
              └─ vX.Y.Z-beta.3
                         ↓
+                 release/vX.Y.Z
+                        ↓
                        main
                         ↓
                       vX.Y.Z
 ```
 
-Hotfix: `main → hotfix/* → main`, y después propagar el arreglo hacia `beta` y `alpha`.
+### Implementado
 
-### Release engineering P0
+- [x] Ramas permanentes `alpha` y `beta` creadas desde la estable.
+- [x] Configuración versionada en `release.config.json` (`stableVersion`, `nextVersion`, 5 alphas, 3 betas).
+- [x] Motor Node para parsear tags, calcular siguiente prerelease y validar promociones.
+- [x] Secuencia estricta: no se permite saltar `alpha.N` o `beta.N`.
+- [x] CLI de release basado en tags Git; no usa contadores manuales.
+- [x] CI redefinido para `alpha`, `beta` y `main`; se retiraron triggers de ramas feature históricas.
+- [x] Alpha exige policy tests + frontend + backend + E2E.
+- [x] Beta/Stable exigen además deployment completo.
+- [x] Workflow `Cut / Promote Release Channel` valida los checks del SHA antes de taggear.
+- [x] `alpha.5` abre candidato `alpha → beta`.
+- [x] `beta.3` prepara `release/vX.Y.Z`, sincroniza package/lock/config y abre PR a `main`.
+- [x] Stable crea tag SemVer y GitHub Release.
+- [x] Workflow de bootstrap para formalizar la estable inicial `v2.0.0` al aterrizar esta infraestructura en `main`.
+- [x] `package-lock.json` sincronizado con `open-signage-plus` `2.0.0` sin alterar el grafo de dependencias.
+- [x] `.vite/` retirado del árbol Git; permanece ignorado.
+- [x] Retirados del release tree dos PDFs ajenos al producto y el prototipo monolítico original; siguen recuperables desde historial Git.
+- [x] Guía operativa en `docs/RELEASES.md`.
+- [x] Pruebas locales de release policy/CLI/config/lock: 14 casos verdes antes de subir.
 
-- [ ] Crear ramas permanentes `alpha` y `beta` desde `main`.
-- [ ] CI en `alpha`, `beta` y `main`; retirar triggers de ramas feature históricas.
-- [ ] Workflow de promoción Alpha → Beta.
-- [ ] Workflow de promoción Beta → Stable.
-- [ ] Contadores/metadata automáticos de alphas y betas.
-- [ ] Tags SemVer y release notes.
-- [ ] Proteger `main`, `beta` y `alpha`; sin force-push.
-- [ ] Checks obligatorios antes de promoción.
-- [ ] Etiquetar la estable actual como `v2.0.0`.
+### Pendiente de configuración del repositorio
+
+- [ ] **P0:** habilitar branch protection/rulesets de GitHub para `main`, `beta` y `alpha` (sin force-push y con required checks). Esta operación es configuración administrativa del repositorio, no código.
+- [ ] Confirmar ejecución del bootstrap `v2.0.0` después del merge de Fase A.
+
+### Hotfix
+
+`main → hotfix/* → main`. Después del merge, propagar el mismo arreglo hacia `beta` y `alpha` mediante PR.
 
 ## 3. Estado por módulos
 
 ### M01 Núcleo — FUNCIONAL
 
-[x] Login/sesiones · [x] RBAC · [x] usuarios · [x] auditoría · [x] settings/health.  
-Pendiente: [ ] P0 recuperación/cambio de contraseña; [ ] P1 2FA/passkeys; [ ] P2 SSO/OIDC.
+- [x] Login/sesiones firmadas.
+- [x] RBAC `admin`, `marketing`, `operator`, `viewer`.
+- [x] Usuarios, auditoría, settings y health.
+- [ ] P0 recuperación/cambio de contraseña administrado desde UI.
+- [ ] P1 2FA/passkeys.
+- [ ] P2 SSO/OIDC/SAML/LDAP.
 
-### M02 Xibo — FUNCIONAL
+### M02 Motor Xibo — FUNCIONAL
 
-[x] OAuth server-side · [x] displays/layouts/playlists/grupos/media · [x] publish/schedule · [x] bridge PLUS→Xibo.  
-Pendiente: [ ] P0 wizard Xibo/OAuth sin editar `.env`; [ ] P1 widgets/datasets/overlays adicionales.
+- [x] OAuth server-side.
+- [x] Displays, layouts, playlists, display groups y media.
+- [x] Publish/scheduling.
+- [x] Bridge PLUS → Xibo Webpage.
+- [ ] P0 wizard Xibo/OAuth sin edición manual de `.env`.
+- [ ] P1 ampliar widgets/datasets/overlays cuando aporte valor.
 
 ### M03 Studio — FUNCIONAL
 
-[x] canvas · [x] plantillas · [x] drag/capas · [x] undo/redo · [x] 16:9/9:16 · [x] timeline/animaciones · [x] HTML Studio sandboxed.  
-Pendiente: [ ] P1 resize handles; [ ] snap/grid; [ ] multi-select/alineación; [ ] copy/paste; [ ] timeline visual; [ ] más plantillas/Brand Kit.
+- [x] Canvas, plantillas, drag, capas, undo/redo.
+- [x] 16:9 / 9:16.
+- [x] Timeline y fade/slide/zoom.
+- [x] HTML Studio con iframe sandbox.
+- [ ] P1 resize handles + snap/grid.
+- [ ] P1 multi-select, alineación y distribución.
+- [ ] P1 copiar/pegar entre escenas.
+- [ ] P1 timeline visual tipo pista.
+- [ ] P1 más plantillas y Brand Kit transversal.
 
-### M04 Browser Player/flota — FUNCIONAL, NO CERTIFICADO EN TODO HARDWARE
+### M04 Browser Player / flota — FUNCIONAL, FALTA CERTIFICACIÓN FÍSICA
 
-[x] `/screen` · [x] `/player/<token>` · [x] pairing · [x] heartbeat · [x] last-known-good · [x] precache · [x] Proof of Play.  
-Pendiente P0: [ ] Chrome/Edge PC; [ ] Raspberry Pi; [ ] Android/Google TV; [ ] Samsung Tizen; [ ] LG webOS; [ ] tablet/panel táctil; [ ] documentar limitaciones/autostart/watchdog.
+- [x] `/screen`, `/player/<token>`, pairing.
+- [x] Heartbeat y metadata.
+- [x] Last-known-good y precache.
+- [x] Proof of Play.
+- [ ] P0 Chrome/Edge PC real.
+- [ ] P0 Raspberry Pi/Chromium.
+- [ ] P0 Android/Google TV browser.
+- [ ] P0 Samsung Tizen browser.
+- [ ] P0 LG webOS browser.
+- [ ] P0 tablet/panel táctil.
+- [ ] P0 matriz documentada de capacidades/limitaciones/autostart/watchdog.
+- [ ] P1 screenshot remoto donde el hardware lo permita.
+- [ ] P1 política LRU/cuotas de cache.
 
 ### M05 Kiosco — FUNCIONAL
 
-[x] navegación segura · [x] Inicio/Atrás · [x] timeout · [x] URL/ticket/scene.  
-Pendiente P1: [ ] teclado virtual; [ ] accesibilidad táctil; [ ] perfiles kiosk por SO.
+- [x] Navegación interna segura.
+- [x] Inicio/Atrás.
+- [x] Timeout por inactividad.
+- [x] Acciones URL/ticket/scene.
+- [ ] P1 teclado virtual.
+- [ ] P1 accesibilidad táctil avanzada.
+- [ ] P1 perfiles kiosk/autostart por SO.
 
 ### M06 Turnos — FUNCIONAL
 
-[x] emisión/prioridad/servicio · [x] llamada/transferencia/completado · [x] métricas · [x] TTS.  
-Pendiente P1: [ ] configurador visual de colas/servicios/módulos; [ ] SLA/abandono/pausa; [ ] reportes históricos; [ ] voz por dispositivo.
+- [x] Emisión, prioridad, servicio, llamada, transferencia y completado.
+- [x] Métricas de espera/servicio.
+- [x] TTS local.
+- [ ] P1 configurador visual de colas/servicios/módulos.
+- [ ] P1 SLA/abandono/pausa.
+- [ ] P1 históricos/reportes y voz por dispositivo.
 
 ### M07 Media — FUNCIONAL
 
-[x] catálogo · [x] SHA-256/deduplicación · [x] huérfanos · [x] FFmpeg H.264/AAC.  
-Pendiente: [ ] P0 cuotas por tenant; [ ] P1 thumbnails/posters; [ ] limpieza segura con rollback; [ ] P2 S3/MinIO/CDN.
+- [x] Catálogo y búsqueda.
+- [x] SHA-256/deduplicación.
+- [x] candidatos huérfanos.
+- [x] FFmpeg H.264/AAC.
+- [ ] P0 cuotas por tenant/sucursal.
+- [ ] P1 thumbnails/posters automáticos.
+- [ ] P1 limpieza segura con preview/rollback.
+- [ ] P2 S3/MinIO/CDN.
 
 ### M08 IA — FUNCIONAL
 
-[x] Ollama/API · [x] health/fallback · [x] generar/revisar · [x] aprobación humana.  
-Pendiente: [ ] P0 límites de costo/rate por tenant; [ ] P1 imagen generativa; [ ] Brand Kit obligatorio; [ ] traducción; [ ] variantes responsive.
+- [x] Ollama/API compatible.
+- [x] Health/diagnostics/fallback.
+- [x] Generar/revisar escena.
+- [x] Aprobación humana antes de publicar.
+- [ ] P0 límites de costo/tokens y rate por usuario/tenant.
+- [ ] P1 imagen generativa desacoplada.
+- [ ] P1 Brand Kit obligatorio para contenido comercial.
+- [ ] P1 traducción y variantes responsive automáticas.
 
 ### M09 Empresas/sucursales — BASE FUNCIONAL
 
-[x] organizaciones · [x] sucursales · [x] memberships.  
-Pendiente P0: [ ] auditoría endpoint por endpoint del aislamiento tenant; [ ] pruebas negativas cross-tenant. P1: [ ] cuotas/límites.
+- [x] Organizaciones, sucursales y memberships.
+- [ ] P0 auditoría endpoint por endpoint del aislamiento tenant.
+- [ ] P0 pruebas negativas cross-tenant.
+- [ ] P1 cuotas/límites por organización.
 
 ### M10 Formularios — BASE FUNCIONAL
 
-[x] diseñador/runtime · [x] rate-limit.  
-Pendiente: [ ] P0 consentimiento/retención; [ ] P1 CSV/Excel; [ ] webhooks; [ ] campos condicionales.
+- [x] Diseñador/runtime público.
+- [x] Rate limit.
+- [ ] P0 consentimiento y retención configurables.
+- [ ] P1 CSV/Excel, webhooks y campos condicionales.
 
 ### M11 Planning/Analytics — BASE FUNCIONAL
 
-[x] preview · [x] conflictos/ganador · [x] Proof of Play/interacciones.  
-Pendiente P1: [ ] calendario drag/drop; [ ] dashboards ejecutivos; [ ] agregación/retención histórica.
+- [x] Preview por fecha/grupo.
+- [x] conflictos/evento ganador.
+- [x] Proof of Play/interacciones.
+- [ ] P1 calendario drag/drop.
+- [ ] P1 dashboard ejecutivo por sucursal/campaña.
+- [ ] P1 agregación/retención histórica.
 
 ### M12 Operaciones/alertas — BASE FUNCIONAL
 
-[x] fleet/system health · [x] SMTP/webhook · [x] cooldown.  
-Pendiente: [ ] P0 backup/disco/TLS alerts; [ ] P1 incident history/ack; [ ] Slack/Telegram opcional.
+- [x] Fleet/system health.
+- [x] SMTP/webhook.
+- [x] cooldown.
+- [ ] P0 alertas de backup fallido, disco bajo y TLS.
+- [ ] P1 historial/ack de incidentes.
+- [ ] P1 Slack/Telegram opcional.
 
 ### M13 Lifecycle — BASE FUNCIONAL
 
-[x] install · [x] doctor · [x] backup/checksum · [x] restore · [x] update/rollback.  
-Pendiente P0: [ ] test backup→restore; [ ] test upgrade desde estable; [ ] backup programado/retención; [ ] disaster restore en VPS/VM limpia.
+- [x] `install.sh`.
+- [x] `doctor.sh`.
+- [x] backup + checksum.
+- [x] restore endurecido.
+- [x] update + rollback de código.
+- [ ] P0 test automatizado backup → restore.
+- [ ] P0 test upgrade desde última estable.
+- [ ] P0 backup programado/retención instalable.
+- [ ] P0 disaster restore en VPS/VM limpia.
 
 ### M14 Seguridad — BUENA BASE, NO CERRADA
 
-[x] RBAC backend · [x] CORS deny-by-default · [x] trust proxy · [x] rate limits · [x] CSP · [x] sandbox · [x] secretos server-side.  
-Pendiente P0: [ ] branch protection; [ ] secret scan/historial; [ ] SAST; [ ] container scan; [ ] rotación de secretos; [ ] threat model; [ ] `SECURITY.md`.
+- [x] RBAC backend.
+- [x] CORS deny-by-default.
+- [x] trust proxy restringido.
+- [x] rate limits.
+- [x] CSP/headers.
+- [x] HTML sandboxed.
+- [x] secretos server-side.
+- [ ] P0 branch protection/rulesets.
+- [ ] P0 secret scanning + revisión de historial.
+- [ ] P0 SAST.
+- [ ] P0 container image scanning.
+- [ ] P0 procedimiento de rotación de secretos.
+- [ ] P0 threat model + `SECURITY.md`.
+- [ ] P1 2FA/passkeys.
 
-### M15 CI — FUNCIONAL, PENDIENTE DE CANALES
+### M15 CI — CANALES IMPLEMENTADOS
 
-[x] frontend audit/lint/build · [x] backend audit/tests · [x] deployment/FFmpeg/smoke · [x] Playwright.  
-Pendiente P0: [ ] alpha/beta/main; [ ] gates por canal; [ ] artefactos en fallos; [ ] instalación completa smoke. P1: [ ] carga/performance.
+- [x] release-policy tests.
+- [x] frontend audit/lint/build.
+- [x] backend audit/tests.
+- [x] E2E Chromium.
+- [x] deployment/Compose/Nginx/images/FFmpeg/API smoke para Beta/Stable.
+- [x] triggers `alpha`, `beta`, `main`.
+- [x] gates diferenciados por canal.
+- [ ] P0 artefactos Playwright/logs en fallos.
+- [ ] P0 instalación completa efímera smoke.
+- [ ] P1 carga/performance programada.
 
-## 4. P0 — bloqueadores de producción comercial
+## 4. P0 — bloqueadores de producción comercial restantes
 
-- [ ] Release engineering Alpha/Beta/Stable completo.
-- [ ] Branch protection y required checks.
-- [ ] Sincronizar `package-lock.json`: todavía conserva `temp-project`/`0.0.0` aunque `package.json` ya es `open-signage-plus` `2.0.0`.
-- [ ] Retirar `.vite/` ya trackeado; `.gitignore` lo ignora, pero sigue en el árbol Git.
-- [ ] Revisar/mover/eliminar artefactos ajenos o históricos de raíz: `Plan de Diseño y Manual Técnico del Sistema de Gestión de Taller Automotriz.pdf`, `content.pdf` y `digital-signage-system (1).tsx` si no son referencia requerida.
-- [ ] Wizard productivo: dominio/TLS, admin, Xibo OAuth, IA, SMTP y primera pantalla.
-- [ ] Certificación física Browser Player.
-- [ ] Backup→restore automatizado.
-- [ ] Upgrade entre estables automatizado.
-- [ ] SAST + secret scan + container scan.
-- [ ] Threat model + `SECURITY.md`.
-- [ ] Cross-tenant security tests.
-- [ ] Política de retención/privacidad para formularios y analytics.
-- [ ] Alertas de disco, backup y TLS.
-- [ ] Procedimiento de rotación de secretos.
-- [ ] Tag/release `v2.0.0`.
+1. [ ] Branch protection/rulesets y required checks en GitHub.
+2. [ ] Wizard productivo: dominio/TLS, admin, Xibo OAuth, IA, SMTP y primera pantalla.
+3. [ ] Certificación física Browser Player y matriz de compatibilidad.
+4. [ ] Backup→restore automatizado.
+5. [ ] Upgrade entre estables automatizado.
+6. [ ] SAST + secret scan + container scan.
+7. [ ] Threat model + `SECURITY.md`.
+8. [ ] Cross-tenant security tests.
+9. [ ] Política de privacidad/retención para formularios y analytics.
+10. [ ] Alertas de disco, backup y certificados TLS.
+11. [ ] Procedimiento probado de rotación de secretos.
+12. [ ] Recuperación/cambio de contraseña y límites de IA por tenant.
 
 ## 5. P1 — completar experiencia de producto
 
-- [ ] Studio avanzado: resize/snap/multi-select/alineación/timeline visual.
+- [ ] Studio: resize/snap/multi-select/alineación/timeline visual.
 - [ ] Biblioteca amplia de plantillas por industria.
 - [ ] Brand Kit transversal Studio/HTML/IA.
 - [ ] Calendar scheduler drag/drop.
@@ -159,59 +264,61 @@ Pendiente P0: [ ] alpha/beta/main; [ ] gates por canal; [ ] artefactos en fallos
 - [ ] Media thumbnails/posters y limpieza segura.
 - [ ] QR dinámico editable + analytics.
 - [ ] Turnos: configurador, SLA y reportes.
-- [ ] Formularios: export, webhooks, lógica condicional.
+- [ ] Formularios: export, webhooks y lógica condicional.
 - [ ] Widgets controlados: reloj, clima, RSS/JSON, KPI, tabla y gráfica.
 - [ ] IA: imágenes, traducción, variantes responsive y límites de costo.
 - [ ] Dashboard ejecutivo de uptime/campañas/PoP/QR/tickets/incidentes.
 - [ ] Configuración segura de servicios desde UI.
 - [ ] Changelog/release notes visibles en administración.
 
-## 6. P2 — escala/enterprise
+## 6. P2 — escala / enterprise
 
 - [ ] Migrar persistencias JSON restantes cuando se requiera multi-réplica.
 - [ ] PostgreSQL/Redis HA.
 - [ ] S3/MinIO/CDN.
-- [ ] Réplicas API detrás de proxy.
+- [ ] réplicas API detrás de proxy.
 - [ ] SSO/OIDC/SAML/LDAP.
 - [ ] HA Xibo/MySQL.
 - [ ] Player empaquetado opcional Android/Tauri/Electron.
-- [ ] Videowall/sincronización.
+- [ ] Videowall/sincronización avanzada.
 - [ ] Marketplace/SDK widgets.
 - [ ] MQTT + conectores ERP/CRM/BI.
 - [ ] Planes/cuotas/billing si se vuelve SaaS.
 - [ ] i18n y WCAG avanzada.
 
-## 7. Orden de ejecución
+## 7. Orden de ejecución desde aquí
 
 ### Fase A — Release engineering
-1. Limpiar metadata/artefactos.
-2. Crear `alpha` y `beta` desde estable.
-3. CI por canal.
-4. Promoción 5 Alpha → Beta y 3 Beta → Stable.
-5. Proteger ramas y crear `v2.0.0`.
 
-### Fase B — Hardening
+Código completado. Solo queda la configuración administrativa de branch protection y confirmar el bootstrap/tag estable al integrar.
+
+### Fase B — Hardening P0
+
 1. `SECURITY.md` + threat model.
 2. SAST/secret/container scanning.
-3. Cross-tenant tests.
-4. Backup/restore/upgrade tests.
-5. Wizard/TLS/secretos.
-6. Alertas disco/backup/TLS.
+3. cross-tenant tests.
+4. backup/restore/upgrade tests.
+5. wizard/TLS/secretos.
+6. alertas disco/backup/TLS.
+7. recuperación de contraseña y límites IA.
 
 ### Fase C — Certificación hardware
-Chrome/Edge → Raspberry Pi → Android TV → Tizen → webOS → tablet/panel táctil. Documentar resultado y workaround.
+
+Chrome/Edge → Raspberry Pi → Android TV → Tizen → webOS → tablet/panel táctil. Documentar resultado y workaround por plataforma.
 
 ### Fase D — UX P1
+
 Studio avanzado → templates/Brand Kit → calendario → widgets → analytics/QR/formularios/turnos → IA.
 
-### Fase E — Candidate
-Alpha 1–5 → Beta 1 → fixes → Beta 2 → fixes → Beta 3 → instalación/upgrade/restore/hardware → stable.
+### Fase E — Candidate real
+
+`alpha.1 → alpha.5 → beta.1 → beta.3 → release/vX.Y.Z → instalación/upgrade/restore/hardware → stable`.
 
 ## 8. Definition of Done de producción
 
 Una versión solo es **Production Ready** cuando:
 
-- [ ] instalación limpia en VPS soportado termina con el wizard documentado;
+- [ ] instalación limpia en VPS soportado termina con wizard documentado;
 - [ ] HTTPS válido y renovación automática;
 - [ ] Xibo OAuth conectado;
 - [ ] Xibo Player y PLUS Browser Player reproducen contenido;
@@ -228,20 +335,14 @@ Una versión solo es **Production Ready** cuando:
 - [ ] sin secretos/build artifacts trackeados;
 - [ ] **cero P0 abiertos**.
 
-## 9. Deuda de repositorio confirmada
+## 9. Evidencia de Fase A
 
-La revisión de `main` encontró deuda concreta que debe resolverse en Fase A:
-
-- `package.json` ya declara `open-signage-plus` `2.0.0`, pero `package-lock.json` conserva metadata `temp-project` `0.0.0`.
-- `.gitignore` ignora `.vite`, pero existe una carpeta `.vite/` trackeada en el repositorio.
-- Hay PDFs de otro contexto y un prototipo monolítico de ~74 KB en la raíz; deben clasificarse como documentación histórica válida o retirarse del producto.
-- El workflow actual todavía referencia ramas feature históricas y no conoce aún `alpha`/`beta`.
-- `main` actualmente no tiene branch protection habilitada.
-
-## 10. Próximo bloque a ejecutar
-
-**Fase A — Release engineering y limpieza**. No iniciar nuevas features P1 hasta que el repositorio tenga canales Alpha/Beta/Stable, metadata limpia, ramas protegidas y `v2.0.0` formalizado.
+- Motor release programado primero localmente.
+- 14 pruebas Node locales cubren policy, CLI, configuración y lock metadata.
+- Lockfile remoto sincronizado sin resolver/actualizar dependencias.
+- Los workflows se validan nuevamente en GitHub Actions antes de integrar.
+- `docs/RELEASES.md` documenta operación y promoción.
 
 ---
 
-Última regla: este MASTER debe actualizarse al cerrar cada bloque. Marcar `[x]` solo con evidencia de código/prueba/operación; nunca por intención.
+Última regla: marcar `[x]` solo después de código/prueba/operación demostrable; nunca por intención.

@@ -1,0 +1,133 @@
+name: Cut / Promote Release Channel
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel to cut
+        required: true
+        type: choice
+        options: [alpha, beta, stable]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  checks: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Load release config
+        id: cfg
+        shell: bash
+        run: |
+          echo "stable=$(node -p \"require('./release.config.json').stableVersion\")" >> "$GITHUB_OUTPUT"
+          echo "next=$(node -p \"require('./release.config.json').nextVersion\")" >> "$GITHUB_OUTPUT"
+          echo "alphas=$(node -p \"require('./release.config.json').alphasPerBeta\")" >> "$GITHUB_OUTPUT"
+          echo "betas=$(node -p \"require('./release.config.json').betasPerStable\")" >> "$GITHUB_OUTPUT"
+
+      - name: Validate branch for channel
+        shell: bash
+        run: |
+          channel='${{ inputs.channel }}'
+          case "$channel" in
+            alpha) expected=alpha ;;
+            beta) expected=beta ;;
+            stable) expected=main ;;
+          esac
+          test "$GITHUB_REF_NAME" = "$expected" || { echo "Run $channel from branch $expected, not $GITHUB_REF_NAME"; exit 1; }
+
+      - name: Verify current commit CI
+        shell: bash
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?per_page=100" > checks.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const checks=JSON.parse(fs.readFileSync('checks.json','utf8')).check_runs || [];
+          const required=JSON.parse(process.env.REQUIRED);
+          const failed=required.filter(name => !checks.some(c => c.name===name && c.conclusion==='success'));
+          if (failed.length) { console.error('Missing successful checks:', failed.join(', ')); process.exit(1); }
+          NODE
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRED: ${{ inputs.channel == 'alpha' && '["release-policy","frontend","backend","e2e"]' || '["release-policy","frontend","backend","e2e","deployment"]' }}
+
+      - name: Cut prerelease tag
+        if: inputs.channel != 'stable'
+        id: prerelease
+        shell: bash
+        run: |
+          version='${{ steps.cfg.outputs.next }}'
+          tag=$(node scripts/release/release-cli.mjs next-tag --version "$version" --channel '${{ inputs.channel }}' --alphas-per-beta '${{ steps.cfg.outputs.alphas }}' --betas-per-stable '${{ steps.cfg.outputs.betas }}')
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          git config user.name 'Open Signage Release Bot'
+          git config user.email 'release-bot@users.noreply.github.com'
+          git tag -a "$tag" -m "Open Signage Plus $tag"
+          git push origin "$tag"
+
+      - name: Publish prerelease notes
+        if: inputs.channel != 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create '${{ steps.prerelease.outputs.tag }}' --prerelease --generate-notes --title 'Open Signage Plus ${{ steps.prerelease.outputs.tag }}'
+
+      - name: Open alpha to beta promotion PR after alpha.5
+        if: inputs.channel == 'alpha' && endsWith(steps.prerelease.outputs.tag, format('alpha.{0}', steps.cfg.outputs.alphas))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh pr list --base beta --head alpha --state open --json number --jq '.[0].number' | grep -q . || \
+            gh pr create --base beta --head alpha --title "Promote ${{ steps.prerelease.outputs.tag }} to beta" --body "Five certified alpha releases reached. Promotion candidate to beta."
+
+      - name: Prepare stable PR after beta.3
+        if: inputs.channel == 'beta' && endsWith(steps.prerelease.outputs.tag, format('beta.{0}', steps.cfg.outputs.betas))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version='${{ steps.cfg.outputs.next }}'
+          node scripts/release/release-cli.mjs assert-promotion --version "$version" --from beta --to stable --alphas-per-beta '${{ steps.cfg.outputs.alphas }}' --betas-per-stable '${{ steps.cfg.outputs.betas }}'
+          branch="release/v$version"
+          git checkout -b "$branch"
+          npm ci
+          node scripts/release/prepare-stable.mjs
+          git config user.name 'Open Signage Release Bot'
+          git config user.email 'release-bot@users.noreply.github.com'
+          git add package.json package-lock.json release.config.json
+          git commit -m "Prepare Open Signage Plus v$version stable"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "Release Open Signage Plus v$version" --body "Prepared automatically after 3 certified beta releases. Merge only with all stable gates green."
+
+      - name: Cut stable release
+        if: inputs.channel == 'stable'
+        id: stable
+        shell: bash
+        run: |
+          version='${{ steps.cfg.outputs.stable }}'
+          test "$(node -p \"require('./package.json').version\")" = "$version" || { echo 'package version does not match stableVersion'; exit 1; }
+          node scripts/release/release-cli.mjs assert-promotion --version "$version" --from beta --to stable --alphas-per-beta '${{ steps.cfg.outputs.alphas }}' --betas-per-stable '${{ steps.cfg.outputs.betas }}'
+          tag="v$version"
+          git rev-parse "$tag" >/dev/null 2>&1 && { echo "$tag already exists"; exit 1; } || true
+          git config user.name 'Open Signage Release Bot'
+          git config user.email 'release-bot@users.noreply.github.com'
+          git tag -a "$tag" -m "Open Signage Plus $tag"
+          git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Publish stable release notes
+        if: inputs.channel == 'stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create '${{ steps.stable.outputs.tag }}' --latest --generate-notes --title 'Open Signage Plus ${{ steps.stable.outputs.tag }}'
