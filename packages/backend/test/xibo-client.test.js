@@ -130,6 +130,37 @@ test('uploadMedia sends binary content to Xibo as multipart form data', async ()
   assert.equal(file.type, 'image/png');
 });
 
+test('createWebpageWidget adds and configures a Xibo webpage widget for a PLUS player URL', async () => {
+  const calls = [];
+  const client = createClient(calls, async (url) => {
+    if (url.endsWith('/api/playlist/widget/webpage/41')) {
+      return new Response(JSON.stringify({ widgetId: 501, type: 'webpage' }), { status: 201, headers: { 'content-type': 'application/json' } });
+    }
+    if (url.endsWith('/api/playlist/widget/501')) {
+      return new Response('', { status: 204 });
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  });
+
+  const result = await client.createWebpageWidget({
+    playlistId: 41,
+    uri: 'https://signage.example.com/player/scene-token',
+    name: 'Open Signage PLUS',
+    duration: 60,
+  });
+
+  assert.equal(result.widgetId, 501);
+  assert.equal(calls[1].url, 'https://signage.example.com/api/playlist/widget/webpage/41');
+  assert.equal(calls[1].options.method, 'POST');
+  assert.equal(calls[2].url, 'https://signage.example.com/api/playlist/widget/501');
+  assert.equal(calls[2].options.method, 'PUT');
+  const body = new URLSearchParams(calls[2].options.body);
+  assert.equal(body.get('uri'), 'https://signage.example.com/player/scene-token');
+  assert.equal(body.get('modeid'), '1');
+  assert.equal(body.get('useDuration'), '1');
+  assert.equal(body.get('duration'), '60');
+});
+
 test('constructor rejects incomplete Xibo credentials', () => {
   assert.throws(() => new XiboClient({ baseUrl: 'https://example.com', clientId: '', clientSecret: 'x' }), /clientId/i);
   assert.throws(() => new XiboClient({ baseUrl: 'https://example.com', clientId: 'x', clientSecret: '' }), /clientSecret/i);
