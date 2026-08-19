@@ -50,7 +50,7 @@ services:
       CMS_SERVER_NAME: ${CMS_SERVER_NAME:-localhost}
       CMS_QUICK_CHART_URL: http://cms-quickchart:3400
     ports:
-      - "8081:80"
+      - "${XIBO_ADMIN_BIND:-127.0.0.1}:8081:80"
     restart: unless-stopped
 
   ollama:
