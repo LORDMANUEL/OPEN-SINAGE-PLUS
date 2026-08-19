@@ -24,10 +24,10 @@ test('Planning Center previews schedules, analytics and notification status', as
   await expect(main.getByText(/Ganador: Promo/)).toBeVisible();
 
   await main.getByRole('button', { name: 'Analytics' }).click();
-  await expect(main.getByText('123')).toBeVisible();
-  await expect(main.getByText('17')).toBeVisible();
+  await expect(main.getByText('123', { exact: true })).toBeVisible();
+  await expect(main.getByText('17', { exact: true })).toBeVisible();
 
   await main.getByRole('button', { name: 'Alertas' }).click();
-  await expect(main.getByText('SMTP')).toBeVisible();
-  await expect(main.getByText('ON')).toBeVisible();
+  await expect(main.getByText('SMTP', { exact: true })).toBeVisible();
+  await expect(main.getByText('ON', { exact: true })).toBeVisible();
 });
