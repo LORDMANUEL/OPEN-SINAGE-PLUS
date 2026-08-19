@@ -5,7 +5,7 @@ import { telemetryApi } from '../services/telemetryApi';
 interface CachedSceneEnvelope { scene: PlayerScene; savedAt: number; version: 2 }
 type TimelineAnimation = 'none' | 'fade' | 'slide' | 'zoom';
 type TimelineItem = PlayerItem & { animation?: TimelineAnimation; startAt?: number; endAt?: number };
-type VisualScene = PlayerScene & { format?: '16:9' | '9:16'; items: TimelineItem[] };
+type VisualScene = PlayerScene & { format?: '16:9' | '9:16' };
 
 export default function PlayerScreen({ token, deviceToken = '' }: { token: string; deviceToken?: string }) {
   const [scene, setScene] = useState<PlayerScene | null>(null);
@@ -18,6 +18,7 @@ export default function PlayerScreen({ token, deviceToken = '' }: { token: strin
   const offlineRef = useRef(false);
   const proofRef = useRef('');
   const sceneStartedAt = useRef(Date.now());
+  const acceptedSceneIdentity = useRef('');
   const cacheKey = useMemo(() => `open-signage-player:v2:${token}`, [token]);
 
   useEffect(() => {
@@ -36,10 +37,14 @@ export default function PlayerScreen({ token, deviceToken = '' }: { token: strin
       navigator.serviceWorker?.controller?.postMessage({ type: 'PRECACHE_MEDIA', urls });
     }
     function acceptScene(next: PlayerScene) {
-      const oldIdentity = sceneIdentity(scene);
       const nextIdentity = sceneIdentity(next);
-      if (oldIdentity !== nextIdentity) { sceneStartedAt.current = Date.now(); setElapsedTotal(0); }
-      setScene(next); cacheScene(next);
+      if (acceptedSceneIdentity.current !== nextIdentity) {
+        acceptedSceneIdentity.current = nextIdentity;
+        sceneStartedAt.current = Date.now();
+        setElapsedTotal(0);
+      }
+      setScene(next);
+      cacheScene(next);
     }
     async function load() {
       let delay = 10_000;
@@ -55,8 +60,6 @@ export default function PlayerScreen({ token, deviceToken = '' }: { token: strin
     }
     const cached = loadCached(); if (cached) acceptScene(cached); void load();
     return () => { disposed = true; if (timer) window.clearTimeout(timer); };
-    // scene identity is intentionally compared inside the loader without making polling depend on scene state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cacheKey, token]);
 
   useEffect(() => {
@@ -81,6 +84,7 @@ export default function PlayerScreen({ token, deviceToken = '' }: { token: strin
 
   if (!scene) return <main className="player-loading" role="main"><div><strong>Open Signage Plus</strong><span>{offline ? 'Sin conexión · esperando contenido en cache…' : 'Conectando player…'}</span></div></main>;
   const visualScene = scene as VisualScene;
+  const timelineItems = visualScene.items as TimelineItem[];
   const duration = Math.max(1, Number(visualScene.duration || 15));
   const playhead = elapsedTotal % duration;
   const cycle = Math.floor(elapsedTotal / duration);
@@ -92,7 +96,7 @@ export default function PlayerScreen({ token, deviceToken = '' }: { token: strin
   return <main className="player-stage" role="main" style={{ background: '#000', display: 'grid', placeItems: 'center' }} aria-label={scene.name}>
     <style>{PLAYER_ANIMATION_CSS}</style>
     <div style={canvasStyle} data-format={vertical ? '9:16' : '16:9'}>
-      {visualScene.items.map((item, index) => {
+      {timelineItems.map((item, index) => {
         const start = Math.max(0, Number(item.startAt ?? 0));
         const end = Math.min(duration, Number(item.endAt ?? duration));
         if (playhead < start || playhead > end) return null;
