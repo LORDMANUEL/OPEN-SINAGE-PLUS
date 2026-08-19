@@ -86,9 +86,24 @@ function probeTlsCertificate({ domain, port = 443, timeoutMs = 5000, warnDays = 
   });
 }
 
+/**
+ * Hash arbitrarily large archives with bounded memory. readFileSync is avoided
+ * because production backups can be multiple gigabytes and must not be loaded
+ * into the API process heap in one allocation.
+ */
 function sha256File(file) {
   const hash = crypto.createHash('sha256');
-  hash.update(fs.readFileSync(file));
+  const fd = fs.openSync(file, 'r');
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  try {
+    let bytesRead;
+    do {
+      bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+      if (bytesRead > 0) hash.update(buffer.subarray(0, bytesRead));
+    } while (bytesRead > 0);
+  } finally {
+    fs.closeSync(fd);
+  }
   return hash.digest('hex');
 }
 
