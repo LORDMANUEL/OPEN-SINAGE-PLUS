@@ -12,12 +12,8 @@ class AiService {
     this.metrics = { requests: 0, failures: 0, lastLatencyMs: null, lastError: null, lastSuccessAt: null };
   }
 
-  status() {
-    return {
-      configured: Boolean(this.provider && this.baseUrl && this.model), provider: this.provider || null, model: this.model || null,
-      fallbackConfigured: Boolean(this.fallback?.status().configured), metrics: { ...this.metrics },
-    };
-  }
+  status() { return { configured: Boolean(this.provider && this.baseUrl && this.model), provider: this.provider || null, model: this.model || null }; }
+  diagnostics() { return { ...this.status(), fallbackConfigured: Boolean(this.fallback?.status().configured), metrics: { ...this.metrics } }; }
 
   async health() {
     if (!this.status().configured) return { ok: false, configured: false, provider: this.provider, model: this.model };
@@ -47,10 +43,7 @@ class AiService {
 
   async #withFallback(operation) {
     try { return await operation(this); }
-    catch (error) {
-      if (!this.fallback?.status().configured) throw error;
-      return operation(this.fallback);
-    }
+    catch (error) { if (!this.fallback?.status().configured) throw error; return operation(this.fallback); }
   }
 
   async #generate(cleanPrompt, context) {
