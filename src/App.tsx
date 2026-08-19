@@ -8,6 +8,7 @@ import DashboardView from './views/DashboardView';
 import ScreenListView from './views/ScreenListView';
 import IntegrationView from './views/IntegrationView';
 import StudioView from './views/StudioView';
+import HtmlStudioView from './views/HtmlStudioView';
 import MediaView from './views/MediaView';
 import PlayerScreen from './views/PlayerScreen';
 import DeviceScreen from './views/DeviceScreen';
@@ -28,6 +29,7 @@ function App() {
     switch (currentView) {
       case 'dashboard': return <DashboardView />;
       case 'studio': return <StudioView />;
+      case 'html-studio': return <HtmlStudioView />;
       case 'ai': return <AiStudioView />;
       case 'media': return <MediaView />;
       case 'queues': return <QueueView />;
