@@ -29,10 +29,10 @@ export default function Sidebar({ currentView, setCurrentView }: SidebarProps) {
         <button className="icon-button icon-button--ghost" type="button" aria-label="Alternar menú" onClick={() => setOpen(value => !value)}>{open ? <X size={18} /> : <Menu size={18} />}</button>
       </div>
       {open && currentUser && <div className="sidebar__user"><span>{currentUser.avatar}</span><div><strong>{currentUser.name}</strong><small>{roleLabels[currentUser.role]}</small></div></div>}
-      <nav className="sidebar__nav" aria-label="Navegación principal">
+      <nav className="sidebar__nav" aria-label="Navegación principal" style={{ flex: 1, minHeight: 0, overflowY: 'auto', alignContent: 'start' }}>
         {items.map(item => <button key={item.id} type="button" title={item.label} className={`sidebar__item ${currentView === item.id ? 'sidebar__item--active' : ''}`} onClick={() => setCurrentView(item.id)}><item.icon size={19} />{open && <span>{item.label}</span>}</button>)}
       </nav>
-      <div className="sidebar__footer">
+      <div className="sidebar__footer" style={{ flexShrink: 0 }}>
         <button type="button" className="sidebar__item" onClick={() => setCurrentView('settings')}><Settings size={19} />{open && <span>Configuración</span>}</button>
         <button type="button" className="sidebar__item sidebar__item--danger" onClick={handleLogout}><LogOut size={19} />{open && <span>Cerrar sesión</span>}</button>
       </div>
