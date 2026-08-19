@@ -1,0 +1,33 @@
+name: Sync release lock metadata
+
+on:
+  push:
+    branches: [feat/release-engineering]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/release-engineering
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Synchronize package lock identity
+        run: node scripts/release/sync-lock-metadata.mjs
+      - name: Commit only when needed
+        shell: bash
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo 'package-lock metadata already synchronized'
+            exit 0
+          fi
+          git config user.name 'Open Signage Release Bot'
+          git config user.email 'release-bot@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'chore: synchronize package lock metadata'
+          git push origin HEAD:feat/release-engineering
