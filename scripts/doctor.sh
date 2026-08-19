@@ -61,7 +61,13 @@ latest_backup="$(find "$BACKUP_ROOT" -maxdepth 1 -type f -name 'open-signage-plu
 if [[ -n "$latest_backup" ]]; then
   age_hours=$(( ( $(date +%s) - $(stat -c %Y "$latest_backup") ) / 3600 ))
   if [[ "$age_hours" -le 48 ]]; then ok "Backup reciente: $latest_backup (${age_hours}h)"; else warn "Último backup tiene ${age_hours}h: $latest_backup"; fi
-  [[ -f "$latest_backup.sha256" ]] && (cd "$(dirname "$latest_backup")" && sha256sum -c "$(basename "$latest_backup").sha256" >/dev/null 2>&1) && ok 'Checksum del último backup válido' || warn 'No se pudo validar checksum del último backup'
+  if [[ -f "$latest_backup.sha256" ]]; then
+    expected_hash="$(awk 'NR==1 {print $1}' "$latest_backup.sha256")"
+    actual_hash="$(sha256sum "$latest_backup" | awk '{print $1}')"
+    [[ -n "$expected_hash" && "$expected_hash" == "$actual_hash" ]] && ok 'Checksum del último backup válido' || warn 'Checksum del último backup no coincide'
+  else
+    warn 'No existe checksum lateral para el último backup'
+  fi
 else
   warn "No hay backups en $BACKUP_ROOT"
 fi
