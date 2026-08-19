@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from 'react';
-import { BarChart3, Bot, Building2, CalendarDays, Home, Image, LayoutTemplate, ListOrdered, LogOut, Menu, Monitor, PlugZap, Settings, ShieldCheck, Smartphone, X } from 'lucide-react';
+import { BarChart3, Bot, Braces, Building2, CalendarDays, Home, Image, LayoutTemplate, ListOrdered, LogOut, Menu, Monitor, PlugZap, Settings, ShieldCheck, Smartphone, X } from 'lucide-react';
 import { useAppContext } from '../context/app-context';
 
 type SidebarProps = { currentView: string; setCurrentView: (view: string) => void };
@@ -18,7 +18,12 @@ export default function Sidebar({ currentView, setCurrentView }: SidebarProps) {
     ...(canOperate ? [{ id: 'operations', icon: ShieldCheck, label: 'Operaciones' } as MenuItem] : []),
     ...(role === 'admin' ? [{ id: 'business', icon: Building2, label: 'Empresas y formularios' } as MenuItem] : []),
     ...(canPlan ? [{ id: 'planning', icon: CalendarDays, label: 'Planificación y analytics' } as MenuItem] : []),
-    ...(canCreate ? [{ id: 'studio', icon: LayoutTemplate, label: 'Studio' } as MenuItem, { id: 'ai', icon: Bot, label: 'AI Studio' } as MenuItem, { id: 'media', icon: Image, label: 'Media' } as MenuItem] : []),
+    ...(canCreate ? [
+      { id: 'studio', icon: LayoutTemplate, label: 'Studio' } as MenuItem,
+      { id: 'html-studio', icon: Braces, label: 'HTML Studio' } as MenuItem,
+      { id: 'ai', icon: Bot, label: 'AI Studio' } as MenuItem,
+      { id: 'media', icon: Image, label: 'Media' } as MenuItem,
+    ] : []),
     ...(canOperateQueues ? [{ id: 'queues', icon: ListOrdered, label: 'Turnos' } as MenuItem] : []),
     ...(role === 'admin' || role === 'marketing' || role === 'viewer' ? [{ id: 'integration', icon: PlugZap, label: 'Motor Xibo' } as MenuItem] : []),
     { id: 'signage', icon: Monitor, label: 'Pantallas' },
