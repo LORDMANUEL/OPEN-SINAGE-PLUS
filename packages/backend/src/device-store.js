@@ -16,17 +16,23 @@ class DeviceStore {
       let pairingCode;
       do { pairingCode = randomPairingCode(); } while (Object.values(state).some(device => device.pairingCode === pairingCode));
       const now = new Date().toISOString();
-      const device = { deviceToken, pairingCode, sceneToken: null, name: '', userAgent: cleanText(userAgent, 240), createdAt: now, updatedAt: now, lastSeenAt: now };
+      const device = {
+        deviceToken, pairingCode, sceneToken: null, name: '', userAgent: cleanText(userAgent, 240),
+        createdAt: now, updatedAt: now, lastSeenAt: now, appVersion: '', resolution: '', orientation: '',
+        storageFreeBytes: null, storageQuotaBytes: null, currentSceneToken: null, lastError: '',
+      };
       state[deviceToken] = device;
       await this.#save(state);
       return device;
     });
   }
 
-  async list() {
+  async list({ onlineWithinMs = 90_000 } = {}) {
     const state = await this.#load();
+    const now = Date.now();
     return Object.values(state)
       .filter(device => device && typeof device === 'object')
+      .map(device => ({ ...device, online: isOnline(device.lastSeenAt, now, onlineWithinMs) }))
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
   }
 
@@ -43,6 +49,35 @@ class DeviceStore {
     });
   }
 
+  async heartbeat(deviceToken, metadata = {}) {
+    const token = validateDeviceToken(deviceToken);
+    return withFileLock(this.filePath, async () => {
+      const state = await this.#load();
+      const device = state[token];
+      if (!device) return null;
+      const now = new Date().toISOString();
+      device.lastSeenAt = now;
+      device.updatedAt = now;
+      device.appVersion = cleanText(metadata.appVersion ?? device.appVersion, 80);
+      device.resolution = cleanText(metadata.resolution ?? device.resolution, 40);
+      device.orientation = ['landscape', 'portrait', 'unknown'].includes(metadata.orientation) ? metadata.orientation : (device.orientation || 'unknown');
+      device.storageFreeBytes = finiteOrNull(metadata.storageFreeBytes, device.storageFreeBytes);
+      device.storageQuotaBytes = finiteOrNull(metadata.storageQuotaBytes, device.storageQuotaBytes);
+      device.currentSceneToken = metadata.currentSceneToken ? validateSceneToken(metadata.currentSceneToken) : (device.currentSceneToken || device.sceneToken || null);
+      device.lastError = cleanText(metadata.lastError ?? '', 500);
+      state[token] = device;
+      await this.#save(state);
+      return { ...device, online: true };
+    });
+  }
+
+  async fleetHealth({ onlineWithinMs = 90_000 } = {}) {
+    const devices = await this.list({ onlineWithinMs });
+    const online = devices.filter(device => device.online).length;
+    const errors = devices.filter(device => device.lastError).length;
+    return { total: devices.length, online, offline: devices.length - online, errors, devices };
+  }
+
   async pair({ pairingCode, sceneToken, name = '' }) {
     const code = validatePairingCode(pairingCode);
     const scene = validateSceneToken(sceneToken);
@@ -52,6 +87,7 @@ class DeviceStore {
       if (!entry) return null;
       const [token, device] = entry;
       device.sceneToken = scene;
+      device.currentSceneToken = scene;
       device.name = cleanText(name, 120);
       device.updatedAt = new Date().toISOString();
       state[token] = device;
@@ -67,6 +103,7 @@ class DeviceStore {
       const device = state[token];
       if (!device) return null;
       device.sceneToken = null;
+      device.currentSceneToken = null;
       device.updatedAt = new Date().toISOString();
       state[token] = device;
       await this.#save(state);
@@ -116,5 +153,7 @@ function validateSceneToken(value) {
   return token;
 }
 function cleanText(value, limit) { return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, limit); }
+function finiteOrNull(value, fallback = null) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback ?? null; }
+function isOnline(lastSeenAt, now = Date.now(), withinMs = 90_000) { const at = Date.parse(lastSeenAt || ''); return Number.isFinite(at) && now - at <= withinMs; }
 
-module.exports = { DeviceStore, randomPairingCode, validateDeviceToken, validatePairingCode, validateSceneToken };
+module.exports = { DeviceStore, randomPairingCode, validateDeviceToken, validatePairingCode, validateSceneToken, isOnline };

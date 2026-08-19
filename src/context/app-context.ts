@@ -1,7 +1,8 @@
 import { createContext, useContext } from 'react';
+import type { UserRole } from '../services/openSignageApi';
 
 export type ScreenType = 'signage' | 'kiosk' | 'dashboard';
-export interface UserRecord { email: string; role: 'admin_it'; name: string; avatar: string }
+export interface UserRecord { id?: string; email: string; role: UserRole; name: string; avatar: string }
 export interface NotificationRecord { id: number; type: 'success' | 'error' | 'info'; message: string; time: Date }
 
 export type AppContextValue = {

@@ -1,14 +1,14 @@
 {
   "name": "open-signage-api",
-  "version": "2.0.0",
-  "description": "Open Signage Plus gateway and orchestration API for Xibo CMS",
+  "version": "2.1.0",
+  "description": "Open Signage Plus gateway, platform database and orchestration API for Xibo CMS",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "test": "node --test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "license": "AGPL-3.0-or-later",
   "type": "commonjs",

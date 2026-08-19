@@ -1,0 +1,16 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["tls"]
+    depends_on:
+      - open-signage-web
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./shared/caddy/data:/data
+      - ./shared/caddy/config:/config
+    restart: unless-stopped
