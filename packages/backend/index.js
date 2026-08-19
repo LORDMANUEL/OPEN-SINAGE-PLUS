@@ -40,6 +40,7 @@ async function start() {
   const healthMonitor = new HealthMonitor({ deviceStore, xiboClient, notificationService, intervalMs: Number(process.env.MONITOR_INTERVAL_MS || 60000), cooldownMs: Number(process.env.ALERT_COOLDOWN_MS || 900000) });
   const qrService = new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) });
   const publicTicketLimit = createRateLimiter({ limit: 60, windowMs: 60_000 });
+  const publicFormLimit = createRateLimiter({ limit: 30, windowMs: 60_000 });
   const telemetryLimit = createRateLimiter({ limit: 240, windowMs: 60_000 });
   const baseApp = createApp({ xiboClient, sceneStore: new SceneStore({ dataDir }), queueStore, deviceStore, aiService, authService, qrService });
 
@@ -89,7 +90,7 @@ async function start() {
 
   app.get('/q/:slug', (req, res) => { const qr = platformStore.resolveDynamicQr(req.params.slug); if (!qr) return res.status(404).send('QR not found'); return res.redirect(302, qr.destination); });
   app.get('/api/forms/:id', (req, res) => { const form = platformStore.getForm(req.params.id); return form ? res.json({ form }) : res.status(404).json({ error: 'FORM_NOT_FOUND' }); });
-  app.post('/api/forms/:id/responses', express.json({ limit: '256kb' }), (req, res) => { try { return res.status(201).json({ response: platformStore.submitForm(req.params.id, req.body || {}) }); } catch (error) { return res.status(400).json({ error: 'INVALID_FORM_RESPONSE', message: error.message }); } });
+  app.post('/api/forms/:id/responses', publicFormLimit, express.json({ limit: '256kb' }), (req, res) => { try { return res.status(201).json({ response: platformStore.submitForm(req.params.id, req.body || {}) }); } catch (error) { return res.status(400).json({ error: 'INVALID_FORM_RESPONSE', message: error.message }); } });
   app.use(baseApp);
 
   const server = app.listen(port, () => { console.log(`Open Signage API listening on http://localhost:${port}`); healthMonitor.start(); });
