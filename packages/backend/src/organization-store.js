@@ -38,6 +38,16 @@ class OrganizationStore {
   }
   getOrganization(id) { const row = this.db.prepare('SELECT * FROM organizations WHERE id=?').get(String(id)); return row ? mapOrg(row) : null; }
   listOrganizations() { return this.db.prepare('SELECT * FROM organizations ORDER BY name').all().map(mapOrg); }
+  listOrganizationsForUser(userEmail) {
+    const email = normalizeEmail(userEmail);
+    return this.db.prepare(`SELECT DISTINCT o.* FROM organizations o
+      JOIN memberships m ON m.organization_id=o.id
+      WHERE m.user_email=? AND o.active=1 ORDER BY o.name`).all(email).map(mapOrg);
+  }
+  canAccessOrganization(userEmail, organizationId) {
+    const email = normalizeEmail(userEmail);
+    return Boolean(this.db.prepare('SELECT 1 FROM memberships WHERE user_email=? AND organization_id=? LIMIT 1').get(email, String(organizationId)));
+  }
   createLocation({ organizationId, name, code, timezone = 'America/Tegucigalpa' }) {
     if (!this.getOrganization(organizationId)) throw new Error('organization not found');
     const id = crypto.randomUUID(); const now = new Date().toISOString();
@@ -46,6 +56,23 @@ class OrganizationStore {
   }
   getLocation(id) { const row = this.db.prepare('SELECT * FROM locations WHERE id=?').get(String(id)); return row ? mapLocation(row) : null; }
   listLocations(organizationId = '') { const rows = organizationId ? this.db.prepare('SELECT * FROM locations WHERE organization_id=? ORDER BY name').all(String(organizationId)) : this.db.prepare('SELECT * FROM locations ORDER BY name').all(); return rows.map(mapLocation); }
+  listLocationsForUser(userEmail, organizationId = '') {
+    const email = normalizeEmail(userEmail);
+    const scoped = organizationId ? String(organizationId) : '';
+    const rows = this.db.prepare(`SELECT DISTINCT l.* FROM locations l
+      JOIN memberships m ON m.organization_id=l.organization_id AND m.user_email=?
+      WHERE (m.location_id IS NULL OR m.location_id=l.id)
+        AND (?='' OR l.organization_id=?) AND l.active=1
+      ORDER BY l.name`).all(email, scoped, scoped);
+    return rows.map(mapLocation);
+  }
+  canAccessLocation(userEmail, locationId) {
+    const email = normalizeEmail(userEmail);
+    const row = this.db.prepare(`SELECT 1 FROM locations l
+      JOIN memberships m ON m.organization_id=l.organization_id AND m.user_email=?
+      WHERE l.id=? AND (m.location_id IS NULL OR m.location_id=l.id) LIMIT 1`).get(email, String(locationId));
+    return Boolean(row);
+  }
   addMembership({ userEmail, organizationId, locationId = null, roleScope = 'member' }) {
     const email = normalizeEmail(userEmail);
     if (!this.getOrganization(organizationId)) throw new Error('organization not found');
