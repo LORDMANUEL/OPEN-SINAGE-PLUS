@@ -37,7 +37,8 @@ fi
 )
 archive="$BACKUP_ROOT/open-signage-plus-$stamp.tar.gz"
 tar -C "$work/payload" -czf "$archive" .
-sha256sum "$archive" > "$archive.sha256"
+actual_hash="$(sha256sum "$archive" | awk '{print $1}')"
+printf '%s  %s\n' "$actual_hash" "$(basename "$archive")" > "$archive.sha256"
 chmod 600 "$archive" "$archive.sha256"
 
 find "$BACKUP_ROOT" -type f -name 'open-signage-plus-*.tar.gz*' -mtime "+$RETENTION_DAYS" -delete
