@@ -33,6 +33,8 @@ export interface XiboMedia {
   mediaType?: string;
   duration?: number;
   fileSize?: number;
+  fileName?: string;
+  thumbnailUrl?: string;
   [key: string]: unknown;
 }
 
@@ -68,6 +70,31 @@ export interface CreateScheduleInput {
   dayPartId?: number;
 }
 
+export interface CreateLayoutInput {
+  name: string;
+  resolutionId?: number;
+  layoutId?: number;
+  description?: string;
+  code?: string;
+  returnDraft?: boolean;
+}
+
+export type PlayerItem =
+  | { id?: string; type: 'text'; text: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number; color?: string; fontSize?: number; align?: 'left' | 'center' | 'right' }
+  | { id?: string; type: 'image'; src: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number; fit?: 'cover' | 'contain' | 'fill' }
+  | { id?: string; type: 'video'; src: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number; fit?: 'cover' | 'contain' | 'fill'; muted?: boolean; loop?: boolean; autoplay?: boolean }
+  | { id?: string; type: 'html'; html: string; x?: number; y?: number; width?: number; height?: number; zIndex?: number };
+
+export interface PlayerScene {
+  token?: string;
+  name: string;
+  duration?: number;
+  background?: string;
+  items: PlayerItem[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -75,7 +102,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       Accept: 'application/json',
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.body && typeof init.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.headers || {}),
     },
   });
@@ -90,6 +117,23 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+async function uploadBinary(file: File, name?: string, tags?: string): Promise<XiboMedia[]> {
+  const response = await fetch(`${API_BASE}/api/xibo/library/upload`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-File-Name': file.name,
+      ...(name ? { 'X-Media-Name': name } : {}),
+      ...(tags ? { 'X-Media-Tags': tags } : {}),
+    },
+    body: file,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof payload?.message === 'string' ? payload.message : `Upload error ${response.status}`);
+  return Array.isArray(payload.media) ? payload.media as XiboMedia[] : [];
+}
+
 export const openSignageApi = {
   health: () => apiRequest<GatewayHealth>('/api/health'),
   xiboStatus: () => apiRequest<XiboStatus>('/api/integrations/xibo/status'),
@@ -99,10 +143,11 @@ export const openSignageApi = {
   xiboPlaylists: async () => (await apiRequest<{ playlists: XiboPlaylist[] }>('/api/xibo/playlists')).playlists,
   xiboDisplayGroups: async () => (await apiRequest<{ displayGroups: XiboDisplayGroup[] }>('/api/xibo/display-groups')).displayGroups,
   xiboSchedules: async () => (await apiRequest<{ schedules: XiboSchedule[] }>('/api/xibo/schedules')).schedules,
+  uploadMedia: uploadBinary,
+  createLayout: (payload: CreateLayoutInput) => apiRequest<{ layout: XiboLayout }>('/api/xibo/layouts', { method: 'POST', body: JSON.stringify(payload) }),
   publishLayout: (layoutId: number) => apiRequest<{ layout: unknown }>(`/api/xibo/layouts/${layoutId}/publish`, { method: 'POST' }),
-  createSchedule: (payload: CreateScheduleInput) =>
-    apiRequest<{ event: unknown }>('/api/xibo/schedules', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+  createSchedule: (payload: CreateScheduleInput) => apiRequest<{ event: unknown }>('/api/xibo/schedules', { method: 'POST', body: JSON.stringify(payload) }),
+  createPlayerScene: (scene: PlayerScene) => apiRequest<{ token: string; scene: PlayerScene }>('/api/player/scenes', { method: 'POST', body: JSON.stringify(scene) }),
+  updatePlayerScene: (token: string, scene: PlayerScene) => apiRequest<{ scene: PlayerScene }>(`/api/player/scenes/${encodeURIComponent(token)}`, { method: 'PUT', body: JSON.stringify(scene) }),
+  getPlayerScene: async (token: string) => (await apiRequest<{ scene: PlayerScene }>(`/api/player/scenes/${encodeURIComponent(token)}`)).scene,
 };
