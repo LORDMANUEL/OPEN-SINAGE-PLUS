@@ -1,9 +1,12 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev \
+    && npm audit fix --omit=dev \
+    && npm audit --omit=dev --audit-level=high \
+    && npm cache clean --force
 
 COPY index.js ./index.js
 COPY src ./src
