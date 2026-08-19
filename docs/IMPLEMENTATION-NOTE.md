@@ -1,0 +1,1 @@
+Open Signage Plus V2 finalization is intentionally being delivered through a single release branch and one pull request. Functional changes, release metadata cleanup, documentation, and certification must stay together so the merged `main` commit corresponds to one reviewed and tested release candidate.
