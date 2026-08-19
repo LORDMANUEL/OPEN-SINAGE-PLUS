@@ -40,6 +40,11 @@ append_env_if_missing() {
   fi
 }
 
+env_last_value() {
+  local key="$1"
+  awk -F= -v wanted="$key" '$1 == wanted { value=substr($0,index($0,"=")+1) } END { print value }' "$ENV_FILE"
+}
+
 echo "Open Signage Plus V2 — instalador"
 if ! command -v docker >/dev/null 2>&1; then echo "ERROR: Docker no está instalado o no está en PATH." >&2; exit 1; fi
 if ! docker compose version >/dev/null 2>&1; then echo "ERROR: Docker Compose v2 no está disponible (se requiere 'docker compose')." >&2; exit 1; fi
@@ -76,11 +81,17 @@ EOF
   echo "Creado .env con secretos aleatorios. Las credenciales OAuth de Xibo quedan pendientes."
 else
   echo "Se conserva el .env existente y se migran únicamente claves nuevas que falten."
-  if ! env_has_value "ADMIN_EMAIL"; then append_env_if_missing "ADMIN_EMAIL" "$ADMIN_EMAIL_VALUE"; fi
+  append_env_if_missing "ADMIN_EMAIL" "$ADMIN_EMAIL_VALUE"
   if ! env_has_value "ADMIN_PASSWORD"; then NEW_ADMIN_PASSWORD="$(random_hex 12)"; append_env_if_missing "ADMIN_PASSWORD" "$NEW_ADMIN_PASSWORD"; fi
-  if ! env_has_value "SESSION_SECRET"; then append_env_if_missing "SESSION_SECRET" "$(random_hex 32)"; fi
+  append_env_if_missing "SESSION_SECRET" "$(random_hex 32)"
   append_env_if_missing "SESSION_TTL_SECONDS" "28800"
   append_env_if_missing "OPEN_SIGNAGE_DATA_DIR" "/data"
+  if [[ "$WITH_AI" -eq 1 ]]; then
+    append_env_if_missing "AI_PROVIDER" "ollama"
+    append_env_if_missing "AI_BASE_URL" "http://ollama:11434"
+    append_env_if_missing "AI_MODEL" "$AI_MODEL"
+    append_env_if_missing "AI_TIMEOUT_MS" "60000"
+  fi
   chmod 600 "$ENV_FILE"
 fi
 
@@ -110,7 +121,7 @@ echo "Xibo CMS (configuración inicial): http://localhost:8081"
 if [[ -n "$NEW_ADMIN_PASSWORD" ]]; then
   echo
   echo "CREDENCIALES ADMINISTRATIVAS GENERADAS (guárdelas ahora):"
-  echo "Email: $(awk -F= '$1=="ADMIN_EMAIL" {print substr($0,index($0,"=")+1); exit}' "$ENV_FILE")"
+  echo "Email: $(env_last_value ADMIN_EMAIL)"
   echo "Contraseña: ${NEW_ADMIN_PASSWORD}"
 fi
 
@@ -122,4 +133,4 @@ echo "3. Cree una aplicación OAuth client_credentials en Xibo."
 echo "4. Coloque XIBO_CLIENT_ID y XIBO_CLIENT_SECRET en .env."
 echo "5. Ejecute: docker compose --env-file .env -f $COMPOSE_FILE up -d open-signage-api"
 echo "6. Entre en Open Signage Plus > Motor Xibo > Verificar conexión."
-if [[ "$WITH_AI" -eq 0 ]]; then echo "7. IA opcional: configure un endpoint compatible o use --with-ai en una instalación nueva."; fi
+if [[ "$WITH_AI" -eq 0 ]]; then echo "7. IA opcional: configure un endpoint compatible o ejecute nuevamente con --with-ai."; fi
