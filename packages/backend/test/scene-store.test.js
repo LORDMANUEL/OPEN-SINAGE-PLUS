@@ -28,6 +28,52 @@ test('scene store creates a token and persists scenes across instances', async (
   }
 });
 
+test('scene store accepts safe touch buttons and QR items', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'open-signage-scenes-'));
+  try {
+    const store = new SceneStore({ dataDir: dir });
+    const created = await store.create({
+      name: 'Kiosco',
+      items: [
+        {
+          type: 'button', text: 'Reservar', x: 20, y: 70, width: 30, height: 10,
+          action: { type: 'openUrl', url: 'https://example.com/reservar' }
+        },
+        { type: 'qr', value: 'https://example.com/promo', x: 60, y: 60, width: 20, height: 20 }
+      ],
+    });
+    assert.equal(created.scene.items[0].action.type, 'openUrl');
+    assert.equal(created.scene.items[0].action.url, 'https://example.com/reservar');
+    assert.equal(created.scene.items[1].type, 'qr');
+    assert.equal(created.scene.items[1].value, 'https://example.com/promo');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('scene store accepts ticket actions but rejects unsafe URLs and unsupported actions', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'open-signage-scenes-'));
+  try {
+    const store = new SceneStore({ dataDir: dir });
+    const created = await store.create({
+      name: 'Turnos',
+      items: [{ type: 'button', text: 'Tomar turno', action: { type: 'ticket', queue: 'recepcion', prefix: 'R' } }],
+    });
+    assert.equal(created.scene.items[0].action.queue, 'recepcion');
+
+    await assert.rejects(
+      store.create({ name: 'Bad URL', items: [{ type: 'button', text: 'X', action: { type: 'openUrl', url: 'javascript:alert(1)' } }] }),
+      /http/i,
+    );
+    await assert.rejects(
+      store.create({ name: 'Bad action', items: [{ type: 'button', text: 'X', action: { type: 'shell', command: 'rm -rf /' } }] }),
+      /action/i,
+    );
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('scene store rejects unsafe or unsupported scene items', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'open-signage-scenes-'));
   try {
