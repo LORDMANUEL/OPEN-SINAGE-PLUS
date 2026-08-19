@@ -1,13 +1,14 @@
 const express = require('express');
 const os = require('node:os');
 const fs = require('node:fs');
-const { createApp, requireAuth } = require('./src/app');
+const { createApp, requireAuth, createRateLimiter } = require('./src/app');
 const { createPlatformRouter } = require('./src/platform-routes');
 const { createXiboIntegrationFromEnv } = require('./src/xibo-integration');
 const { SceneStore } = require('./src/scene-store');
 const { QueueStore } = require('./src/queue-store');
 const { DeviceStore } = require('./src/device-store');
 const { PlatformStore } = require('./src/platform-store');
+const { MediaCatalog } = require('./src/media-catalog');
 const { createAiServiceFromEnv } = require('./src/ai-service');
 const { createAuthServiceFromEnv } = require('./src/auth-service');
 const { QrService } = require('./src/qr-service');
@@ -17,15 +18,18 @@ async function start() {
   const dataDir = process.env.OPEN_SIGNAGE_DATA_DIR || '/data';
   const platformStore = new PlatformStore({ dataDir });
   await platformStore.initialize({ adminEmail: process.env.ADMIN_EMAIL, adminPassword: process.env.ADMIN_PASSWORD });
+  const mediaCatalog = new MediaCatalog({ dataDir });
   const authService = createAuthServiceFromEnv(process.env, platformStore);
   const xiboClient = createXiboIntegrationFromEnv(process.env);
   const deviceStore = new DeviceStore({ dataDir });
+  const queueStore = new QueueStore({ dataDir });
   const aiService = createAiServiceFromEnv(process.env);
   const qrService = new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) });
+  const publicTicketLimit = createRateLimiter({ limit: 60, windowMs: 60_000 });
   const baseApp = createApp({
     xiboClient,
     sceneStore: new SceneStore({ dataDir }),
-    queueStore: new QueueStore({ dataDir }),
+    queueStore,
     deviceStore,
     aiService,
     authService,
@@ -35,6 +39,45 @@ async function start() {
   const app = express();
   app.disable('x-powered-by');
   app.use('/api/platform', express.json({ limit: '1mb' }), requireAuth(authService), createPlatformRouter({ platformStore }));
+
+  app.post('/api/xibo/library/upload', requireAuth(authService), express.raw({ type: () => true, limit: 200 * 1024 * 1024 }), async (req, res) => {
+    try {
+      const bytes = req.body;
+      if (!Buffer.isBuffer(bytes) || bytes.length === 0) return res.status(400).json({ error: 'INVALID_MEDIA' });
+      const hash = mediaCatalog.hash(bytes);
+      const duplicate = mediaCatalog.findByHash(hash);
+      if (duplicate) {
+        mediaCatalog.touch(duplicate.id);
+        platformStore.audit({ actorEmail: req.auth.email, action: 'media.deduplicated', resourceType: 'media', resourceId: duplicate.id, detail: { sha256: hash, fileName: duplicate.fileName }, ip: req.ip });
+        return res.status(200).json({ media: [duplicate.xiboPayload], catalog: { ...duplicate, deduplicated: true } });
+      }
+      const fileName = String(req.get('x-file-name') || '').replace(/[\r\n]/g, '').trim().slice(0, 255);
+      if (!fileName) return res.status(400).json({ error: 'INVALID_MEDIA', message: 'x-file-name is required' });
+      const displayName = String(req.get('x-media-name') || '').replace(/[\r\n]/g, '').trim().slice(0, 255);
+      const tags = String(req.get('x-media-tags') || '').replace(/[\r\n]/g, '').trim().slice(0, 1000);
+      const uploaded = await xiboClient.uploadMedia({ bytes, fileName, contentType: req.get('content-type') || 'application/octet-stream', name: displayName, tags });
+      const xiboPayload = Array.isArray(uploaded) ? uploaded[0] : uploaded;
+      const catalog = mediaCatalog.record({ bytes, fileName, displayName, contentType: req.get('content-type') || '', tags, xiboPayload });
+      platformStore.audit({ actorEmail: req.auth.email, action: 'media.upload', resourceType: 'media', resourceId: catalog.id, detail: { sha256: catalog.sha256, fileName }, ip: req.ip });
+      return res.status(201).json({ media: Array.isArray(uploaded) ? uploaded : [uploaded], catalog });
+    } catch (error) { return res.status(502).json({ error: 'MEDIA_UPLOAD_FAILED', message: String(error.message || 'upload failed').slice(0, 300) }); }
+  });
+  app.get('/api/platform/media/catalog', requireAuth(authService), (req, res) => res.json({ media: mediaCatalog.search({ q: req.query.q, tags: req.query.tags, limit: req.query.limit }) }));
+  app.get('/api/platform/media/orphans', requireAuth(authService), (req, res) => res.json({ media: mediaCatalog.orphanCandidates({ unusedDays: req.query.days }) }));
+
+  app.post('/api/queues/:queue/tickets', publicTicketLimit, express.json({ limit: '64kb' }), async (req, res) => {
+    try {
+      const ticket = await queueStore.issue({ queue: req.params.queue, prefix: req.body?.prefix || 'A', customerName: req.body?.customerName || '', service: req.body?.service || '', priority: req.body?.priority || 0, metadata: req.body?.metadata || {} });
+      return res.status(201).json({ ticket });
+    } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); }
+  });
+  app.get('/api/platform/queues/:queue/stats', requireAuth(authService), async (req, res) => res.json({ stats: await queueStore.stats(req.params.queue) }));
+  app.post('/api/platform/queues/:queue/tickets/:ticketId/transfer', requireAuth(authService), express.json({ limit: '64kb' }), async (req, res) => {
+    try {
+      const ticket = await queueStore.transfer(req.params.queue, req.params.ticketId, req.body || {});
+      return ticket ? res.json({ ticket }) : res.status(404).json({ error: 'TICKET_NOT_FOUND' });
+    } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); }
+  });
 
   app.post('/api/player/devices/:deviceToken/heartbeat', express.json({ limit: '64kb' }), async (req, res) => {
     try {
@@ -74,7 +117,7 @@ async function start() {
   app.use(baseApp);
 
   const server = app.listen(port, () => console.log(`Open Signage API listening on http://localhost:${port}`));
-  const shutdown = () => server.close(() => { platformStore.close(); process.exit(0); });
+  const shutdown = () => server.close(() => { mediaCatalog.close(); platformStore.close(); process.exit(0); });
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 }
