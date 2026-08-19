@@ -1,5 +1,5 @@
 import { useState, type ComponentType } from 'react';
-import { BarChart3, Bot, Building2, Home, Image, LayoutTemplate, ListOrdered, LogOut, Menu, Monitor, PlugZap, Settings, ShieldCheck, Smartphone, X } from 'lucide-react';
+import { BarChart3, Bot, Building2, CalendarDays, Home, Image, LayoutTemplate, ListOrdered, LogOut, Menu, Monitor, PlugZap, Settings, ShieldCheck, Smartphone, X } from 'lucide-react';
 import { useAppContext } from '../context/app-context';
 
 type SidebarProps = { currentView: string; setCurrentView: (view: string) => void };
@@ -12,6 +12,7 @@ export default function Sidebar({ currentView, setCurrentView }: SidebarProps) {
     { id: 'dashboard', icon: Home, label: 'Inicio' },
     { id: 'operations', icon: ShieldCheck, label: 'Operaciones' },
     ...(currentUser?.role === 'admin' ? [{ id: 'business', icon: Building2, label: 'Empresas y formularios' } as MenuItem] : []),
+    { id: 'planning', icon: CalendarDays, label: 'Planificación y analytics' },
     { id: 'studio', icon: LayoutTemplate, label: 'Studio' },
     { id: 'ai', icon: Bot, label: 'AI Studio' },
     { id: 'media', icon: Image, label: 'Media' },
