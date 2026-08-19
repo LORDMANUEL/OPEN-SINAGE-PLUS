@@ -3,7 +3,7 @@ const cors = require('cors');
 
 const MAX_MEDIA_BYTES = 200 * 1024 * 1024;
 
-function createApp({ xiboClient }) {
+function createApp({ xiboClient, sceneStore = null }) {
   if (!xiboClient) throw new Error('xiboClient is required');
 
   const app = express();
@@ -113,6 +113,39 @@ function createApp({ xiboClient }) {
       return res.status(201).json({ event });
     } catch (error) {
       return xiboError(res, error);
+    }
+  });
+
+  app.post('/api/player/scenes', async (req, res) => {
+    if (!sceneStore) return res.status(503).json({ error: 'PLAYER_STORE_UNAVAILABLE' });
+    try {
+      const created = await sceneStore.create(req.body || {});
+      return res.status(201).json(created);
+    } catch (error) {
+      return res.status(400).json({ error: 'INVALID_SCENE', message: sanitizeError(error) });
+    }
+  });
+
+  app.put('/api/player/scenes/:token', async (req, res) => {
+    if (!sceneStore) return res.status(503).json({ error: 'PLAYER_STORE_UNAVAILABLE' });
+    try {
+      const scene = await sceneStore.update(req.params.token, req.body || {});
+      if (!scene) return res.status(404).json({ error: 'SCENE_NOT_FOUND' });
+      return res.json({ scene });
+    } catch (error) {
+      return res.status(400).json({ error: 'INVALID_SCENE', message: sanitizeError(error) });
+    }
+  });
+
+  app.get('/api/player/scenes/:token', async (req, res) => {
+    if (!sceneStore) return res.status(503).json({ error: 'PLAYER_STORE_UNAVAILABLE' });
+    try {
+      const scene = await sceneStore.get(req.params.token);
+      if (!scene) return res.status(404).json({ error: 'SCENE_NOT_FOUND' });
+      res.set('Cache-Control', 'no-store');
+      return res.json({ scene });
+    } catch (error) {
+      return res.status(400).json({ error: 'INVALID_PLAYER_TOKEN', message: sanitizeError(error) });
     }
   });
 
