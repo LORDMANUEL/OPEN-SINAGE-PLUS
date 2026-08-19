@@ -4,7 +4,15 @@ export interface Organization { id: string; name: string; slug: string; createdA
 export interface Location { id: string; organizationId: string; name: string; code: string; timezone?: string; createdAt?: string; updatedAt?: string }
 export interface Membership { id?: string; userEmail: string; organizationId: string; locationId?: string | null; createdAt?: string }
 export interface FormField { name: string; label?: string; type?: 'text' | 'email' | 'tel' | 'textarea' | 'select' | 'checkbox'; required?: boolean; options?: string[] }
-export interface FormDefinition { id: string; name: string; schema: { fields?: FormField[]; submitLabel?: string; successMessage?: string }; createdAt: string; updatedAt: string }
+export interface FormSchema {
+  fields?: FormField[];
+  submitLabel?: string;
+  successMessage?: string;
+  consentRequired?: boolean;
+  consentText?: string;
+  retentionDays?: number;
+}
+export interface FormDefinition { id: string; name: string; schema: FormSchema; createdAt: string; updatedAt: string }
 export interface FormResponse { id: string; formId: string; response: Record<string, unknown>; createdAt: string }
 export interface ScheduleMatch { eventId?: number | string | null; eventName?: string; layoutId?: number | null; priority?: number; fromDt?: string | number | null; toDt?: string | number | null; raw?: XiboSchedule }
 export interface SchedulePreview { at: string; displayGroupId?: number | null; winner: ScheduleMatch | null; matches: ScheduleMatch[]; conflict: boolean }
@@ -46,8 +54,9 @@ export const adminPlatformApi = {
   memberships: async () => (await request<{ memberships: Membership[] }>('/api/platform/organizations/memberships/me')).memberships,
   assignMembership: async (payload: Membership) => (await request<{ memberships: Membership[] }>('/api/platform/organizations/memberships', { method: 'POST', body: JSON.stringify(payload) })).memberships,
   forms: async () => (await request<{ forms: FormDefinition[] }>('/api/platform/forms')).forms,
-  createForm: async (name: string, schema: FormDefinition['schema']) => (await request<{ form: FormDefinition }>('/api/platform/forms', { method: 'POST', body: JSON.stringify({ name, schema }) })).form,
+  createForm: async (name: string, schema: FormSchema) => (await request<{ form: FormDefinition }>('/api/platform/forms', { method: 'POST', body: JSON.stringify({ name, schema }) })).form,
   formResponses: async (formId: string, limit = 500) => (await request<{ responses: FormResponse[] }>(`/api/platform/forms/${encodeURIComponent(formId)}/responses?limit=${limit}`)).responses,
+  purgeExpiredFormResponses: () => request<{ deleted: number; formsChecked: number }>('/api/platform/forms/purge-expired', { method: 'POST' }),
   publicForm: async (formId: string) => (await request<{ form: FormDefinition }>(`/api/forms/${encodeURIComponent(formId)}`)).form,
   submitPublicForm: async (formId: string, response: Record<string, unknown>) => (await request<{ response: FormResponse }>(`/api/forms/${encodeURIComponent(formId)}/responses`, { method: 'POST', body: JSON.stringify(response) })).response,
   schedulePreview: (at: string, displayGroupId?: number) => request<SchedulePreview>(`/api/platform/schedule/preview?at=${encodeURIComponent(at)}${displayGroupId ? `&displayGroupId=${displayGroupId}` : ''}`),

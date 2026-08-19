@@ -2,89 +2,130 @@
 
 ## 1. Instalación productiva
 
-Requisitos: Linux, Docker Engine, Docker Compose v2, Git y al menos un dominio/TLS recomendado para producción.
+Requisitos: Linux, Docker Engine, Docker Compose v2, Git y un dominio con DNS hacia el servidor para producción HTTPS.
 
 ```bash
 git clone https://github.com/LORDMANUEL/OPEN-SINAGE-PLUS.git
 cd OPEN-SINAGE-PLUS
 chmod +x install.sh scripts/*.sh
 ./install.sh --admin-email=admin@empresa.com
+./scripts/setup-wizard.sh
 ```
 
-El instalador genera secretos cuando faltan, crea persistencia, valida Compose, construye imágenes y levanta el stack.
+`install.sh` crea secretos, persistencia y stack base. `setup-wizard.sh` completa la configuración productiva sin editar `.env` manualmente: dominio/TLS, correo administrativo, OAuth Xibo, IA y SMTP/alertas. Los secretos se solicitan de forma oculta en modo interactivo; para automatización es preferible usar variables de entorno en vez de argumentos de shell.
+
+### HTTPS
+
+Con dominio configurado el wizard activa el compose TLS con Caddy y establece `WEB_BIND=127.0.0.1` para que el puerto HTTP interno no quede expuesto directamente.
+
+Modo LAN sin TLS:
+
+```bash
+./scripts/setup-wizard.sh --no-tls
+```
 
 ### IA local opcional
+
+En el wizard seleccionar `ollama`, o ejecutar una instalación base con:
 
 ```bash
 ./install.sh --with-ai --ai-model=qwen2.5:1.5b --admin-email=admin@empresa.com
 ```
 
-En servidores de pocos recursos conviene usar proveedor remoto compatible y dejar Ollama deshabilitado.
+En servidores pequeños conviene un proveedor remoto compatible.
 
-## 2. Primer arranque
+## 2. Xibo / primer arranque
 
-1. Abrir Xibo en `http://SERVIDOR:8081` desde una red administrativa.
-2. Completar wizard Xibo.
+1. Acceder a Xibo por `127.0.0.1:8081` mediante consola, VPN o túnel administrativo; no exponer ese puerto a Internet.
+2. Completar el wizard nativo Xibo.
 3. Crear OAuth `client_credentials`.
-4. Guardar `XIBO_CLIENT_ID` y `XIBO_CLIENT_SECRET` en `.env`.
-5. Reiniciar backend:
+4. Ejecutar otra vez `setup-wizard.sh` e introducir Client ID/secret.
+5. En PLUS: **Motor Xibo → Verificar conexión**.
+6. Abrir `/screen` en la primera pantalla y realizar pairing.
 
-```bash
-docker compose --env-file .env -f docker-compose.v2.yml up -d open-signage-api
-```
-
-6. Abrir PLUS en `http://SERVIDOR:8080`.
-7. Validar `Motor Xibo` y `Planning Center`.
+El wizard no inventa ni extrae credenciales OAuth: deja ese único paso explícitamente pendiente si Xibo todavía no fue inicializado.
 
 ## 3. Operación por módulos
 
-### Studio
+### Studio / HTML Studio
 
-Crear escena, seleccionar plantilla/orientación, editar canvas y timeline. Publicar en Browser Player o insertar la URL publicada como Webpage en un playlist Xibo. Para campañas con aprobación, elegir campaña y pulsar **Guardar nueva versión**.
+Crear escena, plantilla/orientación, canvas y timeline. Publicar en Browser Player o utilizar el bridge hacia un playlist Xibo. HTML se ejecuta en iframe sandbox sin privilegios de script.
 
 ### Pantallas
 
-Para browser player, abrir `/screen` en la TV. Ingresar en Studio el código de seis caracteres mostrado y nombrar la pantalla. La pantalla conserva su identidad, heartbeat y escena asignada.
+Abrir `/screen`, introducir en Studio el código corto y nombrar el dispositivo. Heartbeat, escena actual, errores y Proof of Play se reportan al backend.
 
 ### Turnos
 
-Definir cola, prefijo y módulo. Se puede emitir, llamar, completar y habilitar TTS local. Los kioscos pueden emitir el turno directamente desde un botón de escena.
+Emisión, prioridad, servicio, llamada, transferencia, completado y TTS local. Los endpoints públicos están rate-limited.
 
 ### Media
 
-Subir archivos directos o normalizar videos con FFmpeg. El catálogo usa SHA-256 para deduplicar y permite localizar candidatos huérfanos.
+Subida/deduplicación SHA-256 y normalización FFmpeg H.264/AAC. Revisar candidatos huérfanos antes de limpieza.
 
-### Planning Center
+### Planning / Analytics
 
-Elegir fecha/hora y grupo de pantallas para previsualizar qué evento ganará. Revisar Proof of Play, interacciones y estado de SMTP/Webhook.
+Preview de scheduling, conflictos, Proof of Play e interacciones. La telemetría pública se valida contra escenas/dispositivos reales antes de entrar a analytics.
 
-### Empresas y formularios
+### Empresas / sucursales
 
-Crear organización, sucursales y membresías. Los formularios se diseñan desde la PWA y se publican como `/form/<id>` para QR, tablet o kiosco.
+Las organizaciones son frontera de autorización. Listados de empresa/sucursal de usuarios no-admin se limitan a memberships.
 
-## 4. Diagnóstico
+Los recursos que todavía son globales de despliegue (Xibo/media/scenes/analytics/colas) aplican una política **fail-closed**: con más de una organización activa, un usuario no-admin no puede usarlos hasta que ese recurso tenga scope de organización explícito. Admin conserva operación global. Esto evita afirmar aislamiento multiempresa donde el modelo de datos todavía no lo puede demostrar.
+
+### Formularios y privacidad
+
+Cada formulario nuevo tiene política explícita:
+
+- `consentRequired`: opcional;
+- `consentText`: texto visible al usuario;
+- `retentionDays`: 1–3650, por defecto 365 días.
+
+Si el consentimiento es obligatorio, el runtime no envía sin aceptación y el backend vuelve a validarlo. La bandera de consentimiento es metadata de control y no se almacena como respuesta de negocio. El backend purga respuestas vencidas periódicamente; desde Administración también existe **Purgar vencidas** con auditoría.
+
+## 4. Diagnóstico y alertas P0
 
 ```bash
 ./scripts/doctor.sh
 ```
 
-Valida Docker/Compose, `.env`, secretos mínimos, espacio de disco, estado de servicios, API, PWA, Xibo, FFmpeg y último backup.
+Valida Docker/Compose, `.env`, secretos mínimos, servicios, API/PWA/Xibo, FFmpeg, disco, backup y TLS. Los umbrales se comparten con el monitor del backend:
 
-Para otra URL:
-
-```bash
-WEB_URL=https://signage.midominio.com XIBO_URL=http://127.0.0.1:8081 ./scripts/doctor.sh
+```env
+DISK_FREE_WARN_PERCENT=10
+BACKUP_MAX_AGE_HOURS=30
+TLS_EXPIRY_WARN_DAYS=21
 ```
 
-## 5. Backup
+El backend alerta mediante SMTP/Webhook cuando detecta:
+
+- pantallas offline/errores;
+- Xibo inaccesible;
+- disco por debajo del umbral;
+- backup ausente, vencido, sin checksum o con checksum inválido;
+- certificado TLS próximo a vencer o inválido.
+
+## 5. Backup programado
+
+Backup manual:
 
 ```bash
 ./scripts/backup.sh
 ```
 
-Incluye dump MySQL de Xibo, estado PLUS, librería/custom Xibo y `.env`. Genera `SHA256SUMS` interno y checksum del archivo. El backup contiene secretos: debe almacenarse cifrado o en almacenamiento con acceso restringido.
+Instalar timer diario persistente de systemd:
 
-Verificar sin restaurar:
+```bash
+sudo ./scripts/install-backup-timer.sh
+systemctl status open-signage-plus-backup.timer
+systemctl list-timers open-signage-plus-backup.timer
+```
+
+El timer usa `UMask=0077`, ejecución diaria con jitter y `Persistent=true`.
+
+El backup incluye dump MySQL Xibo, estado PLUS, librería/custom Xibo y `.env`, con manifiesto interno y SHA-256 lateral. Contiene secretos: guardarlo cifrado o bajo ACL restringida.
+
+Verificación:
 
 ```bash
 ./scripts/verify-backup.sh shared/backups/open-signage-plus-YYYYMMDDTHHMMSSZ.tar.gz
@@ -96,17 +137,19 @@ Verificar sin restaurar:
 ./scripts/restore.sh shared/backups/open-signage-plus-YYYYMMDDTHHMMSSZ.tar.gz
 ```
 
-Restore valida checksum, paths del archive, integridad interna, espera MySQL, restaura datos y exige health final de PLUS.
+Antes de extraer valida sidecar SHA-256, paths del archivo e integridad interna; restaura MySQL/PLUS/Xibo y exige health final. Nunca restaurar un archivo cuyo checksum falle.
 
-**Recomendación:** restaurar primero en un VPS/VM de prueba antes de reemplazar producción cuando el incidente no sea urgente.
+CI ejecuta un self-test destructivo controlado: **backup → verify → borrar/mutar datos → restore → validar datos + SQL + health**.
 
-## 7. Actualización
+## 7. Actualización y rollback
 
 ```bash
 ./scripts/update.sh
 ```
 
-Requisitos: working tree limpio y remoto `main`. El flujo crea backup, actualiza por fast-forward, ejecuta instalador y valida health. Si instalación o health falla, revierte el código al commit anterior.
+Requiere working tree limpio. Crea backup, hace fast-forward del branch configurado, instala y valida health. Si install/health falla, hace rollback al SHA previo manteniendo la rama adjunta (no deja HEAD detached).
+
+CI prueba tanto upgrade correcto como update defectuoso + rollback.
 
 ## 8. Logs útiles
 
@@ -118,50 +161,48 @@ docker compose --env-file .env -f docker-compose.v2.yml logs --tail=200 cms-web
 docker compose --env-file .env -f docker-compose.v2.yml logs --tail=200 cms-db
 ```
 
-## 9. Contingencias
+## 9. Seguridad operativa
 
-### PLUS no abre
+- No publicar MySQL, Ollama ni Xibo Admin a Internet.
+- Publicar PLUS mediante HTTPS.
+- `.env` debe permanecer 600/640.
+- Backups se consideran secretos.
+- Usar usuarios individuales y RBAC.
+- En multiempresa, no eliminar el guard global para “hacer funcionar” un rol: primero añadir scope real al recurso.
+- Revisar Auditoría y alertas.
+- Rotar secretos después de personal externo, sospecha de exposición o cambio de administrador.
+- Consultar `SECURITY.md` y `docs/THREAT-MODEL.md` antes de modificar auth/RBAC/public endpoints/lifecycle.
 
-Ejecutar `doctor.sh`, comprobar `open-signage-web` y `open-signage-api`, luego revisar logs.
+## 10. CI y seguridad por canal
 
-### Xibo no conecta
+Alpha exige sobre el SHA exacto:
 
-Validar `XIBO_BASE_URL`, `XIBO_CLIENT_ID`, `XIBO_CLIENT_SECRET`, hora del servidor y conectividad `open-signage-api -> cms-web`.
+- `release-policy`
+- `lifecycle`
+- `frontend`
+- `backend`
+- `e2e`
+- `security-codeql`
+- `security-secrets`
+- `security-fs`
 
-### Pantalla queda offline
+Beta/Stable añade:
 
-El Browser Player usa last-known-good cache. Revisar heartbeat, conectividad del dispositivo y que el token no haya sido borrado del almacenamiento local.
+- `deployment`
+- `security-images`
 
-### Video no reproduce en una TV
+Security CI incluye CodeQL, Gitleaks, Trivy filesystem y Trivy de imágenes productivas. Un check rojo bloquea promoción por diseño.
 
-Usar **Normalizar y subir** en Media para convertir a H.264/AAC. Confirmar espacio libre con `doctor.sh`.
+## 11. Contingencias rápidas
 
-### Cola no anuncia voz
+- **PLUS no abre:** `doctor.sh` → API/web logs.
+- **Xibo no conecta:** OAuth, hora, red API→cms-web.
+- **Pantalla offline:** heartbeat/red/local storage; last-known-good sigue siendo fallback.
+- **Video incompatible:** Media → Normalizar y subir.
+- **Backup crítico:** corregir `cms-db`, crear backup nuevo y verificarlo antes de actualizar.
+- **TLS próximo a vencer:** revisar DNS/Caddy y logs del proxy; no deshabilitar validación para silenciar alerta.
+- **TENANT_SCOPE_REQUIRED:** no es error accidental; indica que un recurso global no tiene scope suficiente para operar de forma segura en multiempresa.
 
-TTS depende de Web Speech del navegador. Confirmar checkbox, volumen del dispositivo, idioma/voz disponibles y permisos del navegador.
+## 12. Definition of Done operativo
 
-### Backup falla
-
-No ignorar el fallo: `backup.sh` se niega a producir un backup incompleto si MySQL no está corriendo. Corregir `cms-db` antes de actualizar o restaurar.
-
-## 10. Seguridad operativa
-
-- No publicar MySQL, Ollama ni Xibo admin directamente a Internet.
-- Exponer la PWA por HTTPS.
-- Mantener `.env` en 600/640.
-- Guardar backups como secreto.
-- Crear usuarios individuales y usar roles; no compartir admin.
-- Revisar Auditoría periódicamente.
-- Probar SMTP/Webhook desde Planning Center.
-- Mantener el firewall limitado a los puertos realmente necesarios.
-
-## 11. Certificación después de cambios
-
-Antes de liberar una versión debe estar verde, sobre el mismo SHA:
-
-- frontend audit/lint/build;
-- backend audit/tests;
-- deployment syntax/Compose/Nginx/images/FFmpeg/API smoke;
-- Playwright E2E.
-
-No se debe marcar una versión como estable con un gate rojo o una prueba omitida sin explicación.
+No se promueve una versión si existe un test obligatorio pendiente, un scanner rojo o un PR de release sin resolver. Para Stable también se exige instalación/upgrade/restore y certificación física definida en `MASTER.md`.

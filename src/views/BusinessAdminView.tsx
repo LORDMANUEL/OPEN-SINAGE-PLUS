@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, ClipboardList, Copy, MapPin, Plus, RefreshCw, UserRoundCog } from 'lucide-react';
+import { Building2, ClipboardList, Copy, MapPin, Plus, RefreshCw, ShieldCheck, Trash2, UserRoundCog } from 'lucide-react';
 import { adminPlatformApi, type FormDefinition, type FormField, type FormResponse, type Location, type Organization } from '../services/adminPlatformApi';
 
 type Tab = 'organizations' | 'forms';
@@ -65,6 +65,9 @@ function FormsPanel() {
   const [fields, setFields] = useState<FormField[]>([{ name: 'nombre', label: 'Nombre', type: 'text', required: true }]);
   const [fieldLabel, setFieldLabel] = useState('');
   const [fieldType, setFieldType] = useState<FormField['type']>('text');
+  const [consentRequired, setConsentRequired] = useState(false);
+  const [consentText, setConsentText] = useState('Acepto el tratamiento de mis datos para la finalidad indicada en este formulario.');
+  const [retentionDays, setRetentionDays] = useState(365);
   const [message, setMessage] = useState('');
   const refresh = useCallback(async () => { try { setForms(await adminPlatformApi.forms()); setMessage(''); } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudieron cargar formularios'); } }, []);
   useEffect(() => { void refresh(); }, [refresh]);
@@ -72,8 +75,11 @@ function FormsPanel() {
 
   function addField() { if (!fieldLabel.trim() || !generatedSlug) return; setFields(current => [...current, { name: generatedSlug, label: fieldLabel.trim(), type: fieldType, required: false }]); setFieldLabel(''); }
   async function createForm() {
-    try { const form = await adminPlatformApi.createForm(name, { fields, submitLabel: 'Enviar', successMessage: '¡Gracias! Tu información fue recibida.' }); setMessage(`Formulario ${form.name} creado.`); await refresh(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo crear formulario'); }
+    try {
+      const form = await adminPlatformApi.createForm(name, { fields, submitLabel: 'Enviar', successMessage: '¡Gracias! Tu información fue recibida.', consentRequired, consentText, retentionDays });
+      setMessage(`Formulario ${form.name} creado con retención de ${form.schema.retentionDays} días.`);
+      await refresh();
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo crear formulario'); }
   }
   async function loadResponses(formId: string) {
     try {
@@ -81,10 +87,17 @@ function FormsPanel() {
       setResponses(current => ({ ...current, [formId]: rows }));
     } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudieron leer respuestas'); }
   }
+  async function purgeExpired() {
+    try {
+      const result = await adminPlatformApi.purgeExpiredFormResponses();
+      setMessage(`Purgadas ${result.deleted} respuestas vencidas en ${result.formsChecked} formularios con política de retención.`);
+      setResponses({});
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo ejecutar la purga'); }
+  }
   async function copyUrl(formId: string) { await navigator.clipboard?.writeText(adminPlatformApi.publicFormUrl(formId)); setMessage('URL pública copiada.'); }
 
   return <div className="studio-grid">
-    <div className="workspace-panel form-grid"><div className="panel-title"><h2><ClipboardList size={20}/> Diseñador guiado</h2><p>Crea formularios para paneles táctiles, tablets o QR.</p></div><label>Nombre<input value={name} onChange={e => setName(e.target.value)}/></label><div className="form-grid"><label>Nuevo campo<input value={fieldLabel} onChange={e => setFieldLabel(e.target.value)} placeholder="Correo electrónico"/></label><label>Tipo<select value={fieldType} onChange={e => setFieldType(e.target.value as FormField['type'])}><option value="text">Texto</option><option value="email">Email</option><option value="tel">Teléfono</option><option value="textarea">Texto largo</option><option value="checkbox">Checkbox</option></select></label><button className="button button--dark" onClick={addField} disabled={!fieldLabel}><Plus size={15}/> Agregar campo</button></div><div className="resource-list">{fields.map((field, index) => <div className="resource-row" key={`${field.name}-${index}`}><div><strong>{field.label}</strong><small>{field.type} · {field.name}</small></div><button className="button button--dark" onClick={() => setFields(current => current.filter((_, itemIndex) => itemIndex !== index))}>Quitar</button></div>)}</div><button className="button button--primary" onClick={() => void createForm()} disabled={!name || fields.length === 0}>Crear formulario</button>{message && <div className="notice notice--success">{message}</div>}</div>
-    <div className="workspace-panel"><div className="panel-title"><h2>Formularios publicados</h2><button className="button button--dark" onClick={() => void refresh()}><RefreshCw size={15}/> Actualizar</button></div><div className="resource-list">{forms.map(form => <div key={form.id}><div className="resource-row"><div><strong>{form.name}</strong><small>{form.schema.fields?.length || 0} campos · {form.id}</small></div><div className="inline-actions"><button className="button button--dark" onClick={() => void copyUrl(form.id)}><Copy size={15}/> URL</button><button className="button button--dark" onClick={() => void loadResponses(form.id)}>Respuestas</button></div></div>{responses[form.id] && <div style={{ padding: '8px 14px 16px' }}><small>{responses[form.id].length} respuestas</small>{responses[form.id].slice(0, 5).map(row => <pre key={row.id} style={{ whiteSpace: 'pre-wrap', fontSize: 11 }}>{JSON.stringify(row.response)}</pre>)}</div>}</div>)}</div></div>
+    <div className="workspace-panel form-grid"><div className="panel-title"><h2><ClipboardList size={20}/> Diseñador guiado</h2><p>Crea formularios para paneles táctiles, tablets o QR.</p></div><label>Nombre<input value={name} onChange={e => setName(e.target.value)}/></label><div className="form-grid"><label>Nuevo campo<input value={fieldLabel} onChange={e => setFieldLabel(e.target.value)} placeholder="Correo electrónico"/></label><label>Tipo<select value={fieldType} onChange={e => setFieldType(e.target.value as FormField['type'])}><option value="text">Texto</option><option value="email">Email</option><option value="tel">Teléfono</option><option value="textarea">Texto largo</option><option value="checkbox">Checkbox</option></select></label><button className="button button--dark" onClick={addField} disabled={!fieldLabel}><Plus size={15}/> Agregar campo</button></div><div className="resource-list">{fields.map((field, index) => <div className="resource-row" key={`${field.name}-${index}`}><div><strong>{field.label}</strong><small>{field.type} · {field.name}</small></div><button className="button button--dark" onClick={() => setFields(current => current.filter((_, itemIndex) => itemIndex !== index))}>Quitar</button></div>)}</div><div className="notice"><strong><ShieldCheck size={16}/> Privacidad</strong><label style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10 }}><input type="checkbox" checked={consentRequired} onChange={e => setConsentRequired(e.target.checked)} style={{ width: 22, height: 22 }}/> Exigir consentimiento explícito</label>{consentRequired && <label>Texto de consentimiento<textarea rows={3} value={consentText} onChange={e => setConsentText(e.target.value)} maxLength={500}/></label>}<label>Días de retención<input type="number" min={1} max={3650} value={retentionDays} onChange={e => setRetentionDays(Math.max(1, Math.min(3650, Number(e.target.value) || 1)))}/></label></div><button className="button button--primary" onClick={() => void createForm()} disabled={!name || fields.length === 0}>Crear formulario</button>{message && <div className="notice notice--success">{message}</div>}</div>
+    <div className="workspace-panel"><div className="panel-title"><div><h2>Formularios publicados</h2><p>Las respuestas se eliminan según la política de cada formulario.</p></div><div className="inline-actions"><button className="button button--dark" onClick={() => void purgeExpired()}><Trash2 size={15}/> Purgar vencidas</button><button className="button button--dark" onClick={() => void refresh()}><RefreshCw size={15}/> Actualizar</button></div></div><div className="resource-list">{forms.map(form => <div key={form.id}><div className="resource-row"><div><strong>{form.name}</strong><small>{form.schema.fields?.length || 0} campos · retención {form.schema.retentionDays || 'legacy'} días · consentimiento {form.schema.consentRequired ? 'sí' : 'no'}</small></div><div className="inline-actions"><button className="button button--dark" onClick={() => void copyUrl(form.id)}><Copy size={15}/> URL</button><button className="button button--dark" onClick={() => void loadResponses(form.id)}>Respuestas</button></div></div>{responses[form.id] && <div style={{ padding: '8px 14px 16px' }}><small>{responses[form.id].length} respuestas</small>{responses[form.id].slice(0, 5).map(row => <pre key={row.id} style={{ whiteSpace: 'pre-wrap', fontSize: 11 }}>{JSON.stringify(row.response)}</pre>)}</div>}</div>)}</div></div>
   </div>;
 }

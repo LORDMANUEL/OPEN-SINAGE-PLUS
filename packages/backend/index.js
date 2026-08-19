@@ -14,6 +14,9 @@ const { DeviceStore } = require('./src/device-store');
 const { PlatformStore } = require('./src/platform-store');
 const { permit, xiboPermissionGuard } = require('./src/rbac-middleware');
 const { OrganizationStore } = require('./src/organization-store');
+const { createGlobalResourceScopeGuard } = require('./src/tenant-boundary');
+const { createPublicGlobalResourceGuard } = require('./src/public-tenant-boundary');
+const { validateTelemetryContext } = require('./src/telemetry-validation');
 const { MediaCatalog } = require('./src/media-catalog');
 const { MediaTranscoder } = require('./src/media-transcoder');
 const { AnalyticsStore } = require('./src/analytics-store');
@@ -34,24 +37,31 @@ async function start() {
   const analyticsStore = new AnalyticsStore({ dataDir });
   const authService = createAuthServiceFromEnv(process.env, platformStore);
   const xiboClient = createXiboIntegrationFromEnv(process.env);
+  const sceneStore = new SceneStore({ dataDir });
   const deviceStore = new DeviceStore({ dataDir });
   const queueStore = new QueueStore({ dataDir });
   const aiService = createAiServiceFromEnv(process.env);
   const notificationService = createNotificationServiceFromEnv(process.env);
   const healthMonitor = new HealthMonitor({ deviceStore, xiboClient, notificationService, intervalMs: Number(process.env.MONITOR_INTERVAL_MS || 60000), cooldownMs: Number(process.env.ALERT_COOLDOWN_MS || 900000) });
   const qrService = new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) });
+  const globalTenantGuard = createGlobalResourceScopeGuard({ organizationStore });
+  const publicGlobalTenantGuard = createPublicGlobalResourceGuard({ organizationStore });
   const publicTicketLimit = createRateLimiter({ limit: 60, windowMs: 60_000 });
   const publicFormLimit = createRateLimiter({ limit: 30, windowMs: 60_000 });
   const telemetryLimit = createRateLimiter({ limit: 240, windowMs: 60_000 });
-  const baseApp = createApp({ xiboClient, sceneStore: new SceneStore({ dataDir }), queueStore, deviceStore, aiService, authService, qrService });
+  const baseApp = createApp({ xiboClient, sceneStore, queueStore, deviceStore, aiService, authService, qrService });
 
   const app = express();
   app.disable('x-powered-by');
-  app.use('/api/platform', express.json({ limit: '1mb' }), requireAuth(authService), createPlatformRouter({ platformStore }));
+
+  // Organization/location APIs enforce their own membership scope. Every other
+  // authenticated platform resource is deployment-global today and therefore
+  // passes the fail-closed tenant guard before any business router executes.
   app.use('/api/platform/organizations', requireAuth(authService), createOrganizationRouter({ organizationStore, platformStore }));
+  app.use('/api/platform', express.json({ limit: '1mb' }), requireAuth(authService), globalTenantGuard, createPlatformRouter({ platformStore }));
   app.use('/api/platform/schedule', requireAuth(authService), createScheduleRouter({ xiboClient, platformStore }));
   app.use('/api/platform/media', requireAuth(authService), createMediaRouter({ xiboClient, mediaCatalog, mediaTranscoder, platformStore }));
-  app.use('/api/ai', requireAuth(authService), permit('ai:use'), createAiRouter({ aiService, platformStore }));
+  app.use('/api/ai', requireAuth(authService), globalTenantGuard, permit('ai:use'), createAiRouter({ aiService, platformStore }));
 
   app.get('/api/platform/notifications/status', requireAuth(authService), permit('health:read'), (_req, res) => res.json(notificationService.status()));
   app.post('/api/platform/notifications/test', requireAuth(authService), permit('settings:write'), express.json({ limit: '64kb' }), async (req, res) => {
@@ -59,11 +69,23 @@ async function start() {
     catch (error) { return res.status(502).json({ error: 'NOTIFICATION_FAILED', message: String(error.message || 'notification failed').slice(0, 300) }); }
   });
 
-  app.post('/api/player/proof', telemetryLimit, express.json({ limit: '64kb' }), (req, res) => { try { return res.status(201).json({ event: analyticsStore.recordPlayback(req.body || {}) }); } catch (error) { return res.status(400).json({ error: 'INVALID_PROOF', message: String(error.message || 'invalid proof').slice(0, 200) }); } });
-  app.post('/api/player/interaction', telemetryLimit, express.json({ limit: '64kb' }), (req, res) => { try { return res.status(201).json({ event: analyticsStore.recordInteraction(req.body || {}) }); } catch (error) { return res.status(400).json({ error: 'INVALID_INTERACTION', message: String(error.message || 'invalid interaction').slice(0, 200) }); } });
+  app.post('/api/player/proof', telemetryLimit, express.json({ limit: '64kb' }), async (req, res) => {
+    try {
+      const context = await validateTelemetryContext({ sceneStore, deviceStore, sceneToken: req.body?.sceneToken, deviceToken: req.body?.deviceToken });
+      if (!context.ok) return res.status(context.status).json({ error: context.error });
+      return res.status(201).json({ event: analyticsStore.recordPlayback(req.body || {}) });
+    } catch (error) { return res.status(400).json({ error: 'INVALID_PROOF', message: String(error.message || 'invalid proof').slice(0, 200) }); }
+  });
+  app.post('/api/player/interaction', telemetryLimit, express.json({ limit: '64kb' }), async (req, res) => {
+    try {
+      const context = await validateTelemetryContext({ sceneStore, deviceStore, sceneToken: req.body?.sceneToken, deviceToken: req.body?.deviceToken });
+      if (!context.ok) return res.status(context.status).json({ error: context.error });
+      return res.status(201).json({ event: analyticsStore.recordInteraction(req.body || {}) });
+    } catch (error) { return res.status(400).json({ error: 'INVALID_INTERACTION', message: String(error.message || 'invalid interaction').slice(0, 200) }); }
+  });
   app.get('/api/platform/analytics/summary', requireAuth(authService), permit('health:read'), (req, res) => res.json(analyticsStore.summary({ sinceHours: req.query.hours })));
 
-  app.post('/api/xibo/library/upload', requireAuth(authService), permit('media:write'), express.raw({ type: () => true, limit: 200 * 1024 * 1024 }), async (req, res) => {
+  app.post('/api/xibo/library/upload', requireAuth(authService), globalTenantGuard, permit('media:write'), express.raw({ type: () => true, limit: 200 * 1024 * 1024 }), async (req, res) => {
     try {
       const bytes = req.body; if (!Buffer.isBuffer(bytes) || bytes.length === 0) return res.status(400).json({ error: 'INVALID_MEDIA' });
       const hash = mediaCatalog.hash(bytes); const duplicate = mediaCatalog.findByHash(hash);
@@ -78,7 +100,9 @@ async function start() {
   app.get('/api/platform/media/catalog', requireAuth(authService), permit('media:read'), (req, res) => res.json({ media: mediaCatalog.search({ q: req.query.q, tags: req.query.tags, limit: req.query.limit }) }));
   app.get('/api/platform/media/orphans', requireAuth(authService), permit('media:read'), (req, res) => res.json({ media: mediaCatalog.orphanCandidates({ unusedDays: req.query.days }) }));
 
-  app.post('/api/queues/:queue/tickets', publicTicketLimit, express.json({ limit: '64kb' }), async (req, res) => { try { const ticket = await queueStore.issue({ queue: req.params.queue, prefix: req.body?.prefix || 'A', customerName: req.body?.customerName || '', service: req.body?.service || '', priority: req.body?.priority || 0, metadata: req.body?.metadata || {} }); return res.status(201).json({ ticket }); } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); } });
+  // Queue names are human-readable deployment-global identifiers. In a true
+  // multi-organization installation they are disabled until P1 adds tenant IDs.
+  app.post('/api/queues/:queue/tickets', publicGlobalTenantGuard, publicTicketLimit, express.json({ limit: '64kb' }), async (req, res) => { try { const ticket = await queueStore.issue({ queue: req.params.queue, prefix: req.body?.prefix || 'A', customerName: req.body?.customerName || '', service: req.body?.service || '', priority: req.body?.priority || 0, metadata: req.body?.metadata || {} }); return res.status(201).json({ ticket }); } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); } });
   app.get('/api/platform/queues/:queue/stats', requireAuth(authService), permit('queue:read'), async (req, res) => res.json({ stats: await queueStore.stats(req.params.queue) }));
   app.post('/api/platform/queues/:queue/tickets/:ticketId/transfer', requireAuth(authService), permit('queue:operate'), express.json({ limit: '64kb' }), async (req, res) => { try { const ticket = await queueStore.transfer(req.params.queue, req.params.ticketId, req.body || {}); return ticket ? res.json({ ticket }) : res.status(404).json({ error: 'TICKET_NOT_FOUND' }); } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); } });
 
@@ -93,15 +117,15 @@ async function start() {
   app.get('/api/forms/:id', (req, res) => { const form = platformStore.getForm(req.params.id); return form ? res.json({ form }) : res.status(404).json({ error: 'FORM_NOT_FOUND' }); });
   app.post('/api/forms/:id/responses', publicFormLimit, express.json({ limit: '256kb' }), (req, res) => { try { return res.status(201).json({ response: platformStore.submitForm(req.params.id, req.body || {}) }); } catch (error) { return res.status(400).json({ error: 'INVALID_FORM_RESPONSE', message: error.message }); } });
 
-  app.use('/api/xibo', requireAuth(authService), xiboPermissionGuard);
+  app.use('/api/xibo', requireAuth(authService), globalTenantGuard, xiboPermissionGuard);
   app.use('/api/player/scenes', (req, res, next) => {
     if (req.method === 'GET') return next();
-    return requireAuth(authService)(req, res, () => permit('campaign:write')(req, res, next));
+    return requireAuth(authService)(req, res, () => globalTenantGuard(req, res, () => permit('campaign:write')(req, res, next)));
   });
-  app.post('/api/player/devices/pair', requireAuth(authService), permit('device:pair'));
+  app.post('/api/player/devices/pair', requireAuth(authService), globalTenantGuard, permit('device:pair'));
   app.use('/api/queues', (req, res, next) => {
     if (req.method === 'POST' && /^\/[a-z0-9_-]+\/tickets$/.test(req.path)) return next();
-    return requireAuth(authService)(req, res, () => permit(req.method === 'GET' ? 'queue:read' : 'queue:operate')(req, res, next));
+    return requireAuth(authService)(req, res, () => globalTenantGuard(req, res, () => permit(req.method === 'GET' ? 'queue:read' : 'queue:operate')(req, res, next)));
   });
   app.use(baseApp);
 

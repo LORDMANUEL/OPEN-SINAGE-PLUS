@@ -78,6 +78,7 @@ services:
         condition: service_started
     volumes:
       - ./shared/open-signage:/data
+      - ./shared/backups:/backups:ro
     environment:
       PORT: 3000
       OPEN_SIGNAGE_DATA_DIR: /data
@@ -87,6 +88,11 @@ services:
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-28800}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       TRUST_PROXY: ${TRUST_PROXY:-loopback, linklocal, uniquelocal}
+      DOMAIN: ${DOMAIN:-}
+      BACKUP_MONITOR_ROOT: /backups
+      DISK_FREE_WARN_PERCENT: ${DISK_FREE_WARN_PERCENT:-10}
+      BACKUP_MAX_AGE_HOURS: ${BACKUP_MAX_AGE_HOURS:-30}
+      TLS_EXPIRY_WARN_DAYS: ${TLS_EXPIRY_WARN_DAYS:-21}
       XIBO_BASE_URL: ${XIBO_BASE_URL:-http://cms-web}
       XIBO_CLIENT_ID: ${XIBO_CLIENT_ID}
       XIBO_CLIENT_SECRET: ${XIBO_CLIENT_SECRET}
@@ -128,7 +134,7 @@ services:
       open-signage-api:
         condition: service_healthy
     ports:
-      - "8080:80"
+      - "${WEB_BIND:-0.0.0.0}:8080:80"
     restart: unless-stopped
 
 networks:

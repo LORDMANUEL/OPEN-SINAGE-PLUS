@@ -5,6 +5,13 @@ function createPlatformRouter({ platformStore }) {
   if (!platformStore) throw new Error('platformStore is required');
   const router = express.Router();
 
+  // Retention must be time-based, not traffic-based. This lightweight timer is
+  // intentionally unref'ed so it never blocks a graceful Node shutdown.
+  const retentionTimer = setInterval(() => {
+    try { platformStore.purgeExpiredFormResponses(); } catch { /* retention must not crash the API */ }
+  }, 6 * 60 * 60 * 1000);
+  retentionTimer.unref?.();
+
   router.get('/me', (req, res) => res.json({ user: req.auth, permissions: ROLE_PERMISSIONS[req.auth?.role] || [] }));
 
   router.get('/users', permit('user:manage'), (_req, res) => res.json({ users: platformStore.listUsers() }));
@@ -92,8 +99,15 @@ function createPlatformRouter({ platformStore }) {
   router.post('/forms', permit('form:manage'), (req, res) => {
     try {
       const form = platformStore.createForm({ name: req.body?.name, schema: req.body?.schema || {} });
-      auditRequest(platformStore, req, 'form.create', 'form', form.id, { name: form.name });
+      auditRequest(platformStore, req, 'form.create', 'form', form.id, { name: form.name, retentionDays: form.schema?.retentionDays, consentRequired: Boolean(form.schema?.consentRequired) });
       return res.status(201).json({ form });
+    } catch (error) { return validationError(res, error); }
+  });
+  router.post('/forms/purge-expired', permit('form:manage'), (req, res) => {
+    try {
+      const result = platformStore.purgeExpiredFormResponses();
+      auditRequest(platformStore, req, 'form.responses.purge', 'form_response', '', result);
+      return res.json(result);
     } catch (error) { return validationError(res, error); }
   });
   router.get('/forms/:id/responses', permit('form:manage'), (req, res) => res.json({ responses: platformStore.listFormResponses(req.params.id, req.query.limit) }));

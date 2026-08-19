@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-COMPOSE_FILE="docker-compose.v2.yml"
-ENV_FILE=".env"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.v2.yml}"
+ENV_FILE="${ENV_FILE:-.env}"
 WITH_AI=0
 AI_MODEL="${AI_MODEL:-qwen2.5:1.5b}"
 ADMIN_EMAIL_VALUE="${ADMIN_EMAIL:-admin@opensignage.local}"
@@ -62,10 +62,15 @@ ADMIN_EMAIL=${ADMIN_EMAIL_VALUE}
 ADMIN_PASSWORD=${NEW_ADMIN_PASSWORD}
 SESSION_SECRET=${SESSION_SECRET}
 SESSION_TTL_SECONDS=28800
+CORS_ORIGINS=
+TRUST_PROXY=loopback, linklocal, uniquelocal
+DOMAIN=
+WEB_BIND=0.0.0.0
 XIBO_BASE_URL=http://cms-web
 XIBO_CLIENT_ID=
 XIBO_CLIENT_SECRET=
 XIBO_TIMEOUT_MS=10000
+XIBO_ADMIN_BIND=127.0.0.1
 MYSQL_PASSWORD=${MYSQL_PASSWORD}
 CMS_SERVER_NAME=localhost
 AI_PROVIDER=${AI_PROVIDER_VALUE}
@@ -75,17 +80,39 @@ AI_API_KEY=
 AI_TIMEOUT_MS=60000
 QUICKCHART_BASE_URL=http://cms-quickchart:3400
 QR_TIMEOUT_MS=10000
+ALERT_WEBHOOK_URL=
+SMTP_HOST=
+SMTP_PORT=465
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+ALERT_EMAIL_TO=
+MONITOR_INTERVAL_MS=60000
+ALERT_COOLDOWN_MS=900000
+DISK_FREE_WARN_PERCENT=10
+BACKUP_MAX_AGE_HOURS=30
+TLS_EXPIRY_WARN_DAYS=21
+BACKUP_ROOT=shared/backups
+RETENTION_DAYS=14
 VITE_API_BASE_URL=
 EOF
   chmod 600 "$ENV_FILE"
-  echo "Creado .env con secretos aleatorios. Las credenciales OAuth de Xibo quedan pendientes."
+  echo "Creado $ENV_FILE con secretos aleatorios. Las credenciales OAuth de Xibo quedan pendientes."
 else
-  echo "Se conserva el .env existente y se migran únicamente claves nuevas que falten."
+  echo "Se conserva el $ENV_FILE existente y se migran únicamente claves nuevas que falten."
   append_env_if_missing "ADMIN_EMAIL" "$ADMIN_EMAIL_VALUE"
   if ! env_has_value "ADMIN_PASSWORD"; then NEW_ADMIN_PASSWORD="$(random_hex 12)"; append_env_if_missing "ADMIN_PASSWORD" "$NEW_ADMIN_PASSWORD"; fi
   append_env_if_missing "SESSION_SECRET" "$(random_hex 32)"
   append_env_if_missing "SESSION_TTL_SECONDS" "28800"
   append_env_if_missing "OPEN_SIGNAGE_DATA_DIR" "/data"
+  append_env_if_missing "DOMAIN" ""
+  append_env_if_missing "WEB_BIND" "0.0.0.0"
+  append_env_if_missing "XIBO_ADMIN_BIND" "127.0.0.1"
+  append_env_if_missing "DISK_FREE_WARN_PERCENT" "10"
+  append_env_if_missing "BACKUP_MAX_AGE_HOURS" "30"
+  append_env_if_missing "TLS_EXPIRY_WARN_DAYS" "21"
+  append_env_if_missing "BACKUP_ROOT" "shared/backups"
+  append_env_if_missing "RETENTION_DAYS" "14"
   if [[ "$WITH_AI" -eq 1 ]]; then
     append_env_if_missing "AI_PROVIDER" "ollama"
     append_env_if_missing "AI_BASE_URL" "http://ollama:11434"
@@ -95,7 +122,7 @@ else
   chmod 600 "$ENV_FILE"
 fi
 
-mkdir -p shared/db shared/backup shared/cms/custom shared/cms/library shared/cms/web/userscripts shared/cms/ca-certs shared/open-signage shared/ollama
+mkdir -p shared/db shared/backup shared/backups shared/cms/custom shared/cms/library shared/cms/web/userscripts shared/cms/ca-certs shared/open-signage shared/ollama
 
 echo "Validando configuración Docker..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null
@@ -117,7 +144,7 @@ if [[ "$WITH_AI" -eq 1 ]]; then docker compose --profile ai --env-file "$ENV_FIL
 echo
 echo "Open Signage Plus: http://localhost:8080"
 echo "Pantalla navegador: http://localhost:8080/screen"
-echo "Xibo CMS (configuración inicial): http://localhost:8081"
+echo "Xibo CMS administrativo: http://127.0.0.1:8081 (usar túnel/red administrativa si es remoto)"
 if [[ -n "$NEW_ADMIN_PASSWORD" ]]; then
   echo
   echo "CREDENCIALES ADMINISTRATIVAS GENERADAS (guárdelas ahora):"
@@ -126,11 +153,6 @@ if [[ -n "$NEW_ADMIN_PASSWORD" ]]; then
 fi
 
 echo
-echo "SIGUIENTE PASO:"
-echo "1. Ingrese a Open Signage Plus con las credenciales administrativas."
-echo "2. Termine el asistente inicial de Xibo en el puerto 8081."
-echo "3. Cree una aplicación OAuth client_credentials en Xibo."
-echo "4. Coloque XIBO_CLIENT_ID y XIBO_CLIENT_SECRET en .env."
-echo "5. Ejecute: docker compose --env-file .env -f $COMPOSE_FILE up -d open-signage-api"
-echo "6. Entre en Open Signage Plus > Motor Xibo > Verificar conexión."
-if [[ "$WITH_AI" -eq 0 ]]; then echo "7. IA opcional: configure un endpoint compatible o ejecute nuevamente con --with-ai."; fi
+echo "SIGUIENTE PASO RECOMENDADO:"
+echo "Ejecute ./scripts/setup-wizard.sh para dominio/TLS, Xibo OAuth, IA y alertas SMTP."
+echo "Si prefiere hacerlo manualmente, complete Xibo, actualice $ENV_FILE y reinicie open-signage-api."
