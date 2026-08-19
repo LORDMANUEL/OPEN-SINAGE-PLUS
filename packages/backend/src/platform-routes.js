@@ -84,6 +84,11 @@ function createPlatformRouter({ platformStore }) {
     } catch (error) { return validationError(res, error); }
   });
 
+  router.get('/forms', permit('form:manage'), (_req, res) => {
+    const rows = platformStore.db.prepare('SELECT id,name,schema_json,created_at,updated_at FROM forms ORDER BY updated_at DESC').all();
+    const forms = rows.map(row => ({ id: row.id, name: row.name, schema: safeJson(row.schema_json, {}), createdAt: row.created_at, updatedAt: row.updated_at }));
+    return res.json({ forms });
+  });
   router.post('/forms', permit('form:manage'), (req, res) => {
     try {
       const form = platformStore.createForm({ name: req.body?.name, schema: req.body?.schema || {} });
@@ -103,10 +108,8 @@ function permit(permission) {
     return next();
   };
 }
-
-function auditRequest(store, req, action, resourceType, resourceId, detail = {}) {
-  store.audit({ actorEmail: req.auth?.email || '', action, resourceType, resourceId, detail, ip: req.ip || '' });
-}
+function auditRequest(store, req, action, resourceType, resourceId, detail = {}) { store.audit({ actorEmail: req.auth?.email || '', action, resourceType, resourceId, detail, ip: req.ip || '' }); }
 function validationError(res, error) { return res.status(400).json({ error: 'INVALID_REQUEST', message: error instanceof Error ? error.message : 'Invalid request' }); }
+function safeJson(value, fallback) { try { return JSON.parse(value); } catch { return fallback; } }
 
 module.exports = { createPlatformRouter, permit, auditRequest };
