@@ -9,6 +9,8 @@ class UnconfiguredXiboClient {
   async getPlaylists() { throw this.#error(); }
   async getDisplayGroups() { throw this.#error(); }
   async getSchedules() { throw this.#error(); }
+  async createLayout() { throw this.#error(); }
+  async uploadMedia() { throw this.#error(); }
   async publishLayout() { throw this.#error(); }
   async createSchedule() { throw this.#error(); }
 }
