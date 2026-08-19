@@ -10,6 +10,7 @@ import IntegrationView from './views/IntegrationView';
 import StudioView from './views/StudioView';
 import MediaView from './views/MediaView';
 import PlayerScreen from './views/PlayerScreen';
+import DeviceScreen from './views/DeviceScreen';
 import AiStudioView from './views/AiStudioView';
 import QueueView from './views/QueueView';
 
@@ -42,8 +43,16 @@ function getPlayerTokenFromPath() {
   return match?.[1] ?? null;
 }
 
+function getDeviceTokenFromPath() {
+  if (/^\/screen\/?$/.test(window.location.pathname)) return '';
+  const match = window.location.pathname.match(/^\/screen\/([a-zA-Z0-9_-]{20,128})\/?$/);
+  return match?.[1] ?? null;
+}
+
 export default function AppWrapper() {
   const playerToken = getPlayerTokenFromPath();
   if (playerToken) return <PlayerScreen token={playerToken} />;
+  const deviceToken = getDeviceTokenFromPath();
+  if (deviceToken !== null) return <DeviceScreen initialToken={deviceToken || null} />;
   return <AppProvider><App /></AppProvider>;
 }
