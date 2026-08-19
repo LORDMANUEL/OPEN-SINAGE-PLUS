@@ -7,6 +7,14 @@ function normalizeBaseUrl(value) {
   return value.replace(/\/+$/, '');
 }
 
+function normalizeHttpUrl(value, label = 'URL') {
+  if (!value || typeof value !== 'string') throw new Error(`${label} is required`);
+  let parsed;
+  try { parsed = new URL(value); } catch { throw new Error(`${label} must be a valid HTTP(S) URL`); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(`${label} must use HTTP or HTTPS`);
+  return parsed.toString();
+}
+
 function appendFormFields(form, payload) {
   for (const [key, value] of Object.entries(payload || {})) {
     if (value === undefined || value === null || value === '') continue;
@@ -116,6 +124,41 @@ class XiboClient {
     });
   }
 
+  async createWebpageWidget({ playlistId, uri, name = 'Open Signage PLUS', duration = 60 }) {
+    const normalizedPlaylistId = Number(playlistId);
+    if (!Number.isInteger(normalizedPlaylistId) || normalizedPlaylistId <= 0) throw new Error('playlistId must be a positive integer');
+    const normalizedUri = normalizeHttpUrl(uri, 'uri');
+    const normalizedDuration = Math.max(1, Math.min(526000, Number(duration) || 60));
+
+    const created = await this.request(`/api/playlist/widget/webpage/${normalizedPlaylistId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: '',
+    });
+
+    const widgetId = Number(created?.widgetId || created?.id || created?.data?.widgetId || created?.data?.id);
+    if (!Number.isInteger(widgetId) || widgetId <= 0) throw new Error('Xibo webpage widget response did not contain widgetId');
+
+    const body = appendFormFields(new URLSearchParams(), {
+      useDuration: 1,
+      duration: normalizedDuration,
+      name,
+      enableStat: 'Inherit',
+      uri: normalizedUri,
+      transparency: 0,
+      isPreNavigate: 0,
+      modeid: 1,
+    });
+
+    await this.request(`/api/playlist/widget/${widgetId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    return { ...(created && typeof created === 'object' ? created : {}), widgetId };
+  }
+
   async createSchedule(payload) {
     const body = appendFormFields(new URLSearchParams(), payload);
     return this.request('/api/schedule', {
@@ -153,4 +196,4 @@ class XiboClient {
   }
 }
 
-module.exports = { XiboClient, normalizeBaseUrl, appendFormFields };
+module.exports = { XiboClient, normalizeBaseUrl, normalizeHttpUrl, appendFormFields };
