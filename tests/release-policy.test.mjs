@@ -41,3 +41,8 @@ test('reports promotion readiness', () => {
 test('never releases the same stable version twice', () => {
   assert.throws(() => nextTag({ tags: [...beta3,'v2.1.0'], version:'2.1.0', channel:'stable' }), /already stable/);
 });
+
+test('rejects non-contiguous prerelease histories', () => {
+  assert.throws(() => channelStatus({ tags:['v2.1.0-alpha.1','v2.1.0-alpha.3'], version:'2.1.0' }), /gap/);
+  assert.throws(() => channelStatus({ tags:[...alpha5,'v2.1.0-beta.2'], version:'2.1.0' }), /gap/);
+});
