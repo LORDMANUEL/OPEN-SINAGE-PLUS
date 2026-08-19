@@ -4,15 +4,20 @@ const fs = require('node:fs');
 const { createApp, requireAuth, createRateLimiter } = require('./src/app');
 const { createPlatformRouter } = require('./src/platform-routes');
 const { createAiRouter } = require('./src/ai-routes');
+const { createScheduleRouter } = require('./src/schedule-routes');
+const { createOrganizationRouter } = require('./src/organization-routes');
 const { createXiboIntegrationFromEnv } = require('./src/xibo-integration');
 const { SceneStore } = require('./src/scene-store');
 const { QueueStore } = require('./src/queue-store');
 const { DeviceStore } = require('./src/device-store');
 const { PlatformStore } = require('./src/platform-store');
+const { OrganizationStore } = require('./src/organization-store');
 const { MediaCatalog } = require('./src/media-catalog');
 const { AnalyticsStore } = require('./src/analytics-store');
 const { createAiServiceFromEnv } = require('./src/ai-service');
 const { createAuthServiceFromEnv } = require('./src/auth-service');
+const { createNotificationServiceFromEnv } = require('./src/notification-service');
+const { HealthMonitor } = require('./src/health-monitor');
 const { QrService } = require('./src/qr-service');
 
 async function start() {
@@ -20,6 +25,7 @@ async function start() {
   const dataDir = process.env.OPEN_SIGNAGE_DATA_DIR || '/data';
   const platformStore = new PlatformStore({ dataDir });
   await platformStore.initialize({ adminEmail: process.env.ADMIN_EMAIL, adminPassword: process.env.ADMIN_PASSWORD });
+  const organizationStore = new OrganizationStore({ dataDir });
   const mediaCatalog = new MediaCatalog({ dataDir });
   const analyticsStore = new AnalyticsStore({ dataDir });
   const authService = createAuthServiceFromEnv(process.env, platformStore);
@@ -27,6 +33,8 @@ async function start() {
   const deviceStore = new DeviceStore({ dataDir });
   const queueStore = new QueueStore({ dataDir });
   const aiService = createAiServiceFromEnv(process.env);
+  const notificationService = createNotificationServiceFromEnv(process.env);
+  const healthMonitor = new HealthMonitor({ deviceStore, xiboClient, notificationService, intervalMs: Number(process.env.MONITOR_INTERVAL_MS || 60000), cooldownMs: Number(process.env.ALERT_COOLDOWN_MS || 900000) });
   const qrService = new QrService({ baseUrl: process.env.QUICKCHART_BASE_URL || 'http://cms-quickchart:3400', timeoutMs: Number(process.env.QR_TIMEOUT_MS || 10000) });
   const publicTicketLimit = createRateLimiter({ limit: 60, windowMs: 60_000 });
   const telemetryLimit = createRateLimiter({ limit: 240, windowMs: 60_000 });
@@ -35,7 +43,15 @@ async function start() {
   const app = express();
   app.disable('x-powered-by');
   app.use('/api/platform', express.json({ limit: '1mb' }), requireAuth(authService), createPlatformRouter({ platformStore }));
+  app.use('/api/platform/organizations', requireAuth(authService), createOrganizationRouter({ organizationStore, platformStore }));
+  app.use('/api/platform/schedule', requireAuth(authService), createScheduleRouter({ xiboClient, platformStore }));
   app.use('/api/ai', requireAuth(authService), createAiRouter({ aiService, platformStore }));
+
+  app.get('/api/platform/notifications/status', requireAuth(authService), (_req, res) => res.json(notificationService.status()));
+  app.post('/api/platform/notifications/test', requireAuth(authService), express.json({ limit: '64kb' }), async (req, res) => {
+    try { return res.json({ results: await notificationService.send({ subject: req.body?.subject || 'Open Signage Plus test', text: req.body?.text || 'Notificación de prueba', severity: 'info' }) }); }
+    catch (error) { return res.status(502).json({ error: 'NOTIFICATION_FAILED', message: String(error.message || 'notification failed').slice(0, 300) }); }
+  });
 
   app.post('/api/player/proof', telemetryLimit, express.json({ limit: '64kb' }), (req, res) => {
     try { return res.status(201).json({ event: analyticsStore.recordPlayback(req.body || {}) }); }
@@ -80,17 +96,13 @@ async function start() {
   });
   app.get('/api/platform/queues/:queue/stats', requireAuth(authService), async (req, res) => res.json({ stats: await queueStore.stats(req.params.queue) }));
   app.post('/api/platform/queues/:queue/tickets/:ticketId/transfer', requireAuth(authService), express.json({ limit: '64kb' }), async (req, res) => {
-    try {
-      const ticket = await queueStore.transfer(req.params.queue, req.params.ticketId, req.body || {});
-      return ticket ? res.json({ ticket }) : res.status(404).json({ error: 'TICKET_NOT_FOUND' });
-    } catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); }
+    try { const ticket = await queueStore.transfer(req.params.queue, req.params.ticketId, req.body || {}); return ticket ? res.json({ ticket }) : res.status(404).json({ error: 'TICKET_NOT_FOUND' }); }
+    catch (error) { return res.status(400).json({ error: 'INVALID_TICKET', message: error.message }); }
   });
 
   app.post('/api/player/devices/:deviceToken/heartbeat', express.json({ limit: '64kb' }), async (req, res) => {
-    try {
-      const device = await deviceStore.heartbeat(req.params.deviceToken, req.body || {});
-      return device ? res.json({ device }) : res.status(404).json({ error: 'DEVICE_NOT_FOUND' });
-    } catch (error) { return res.status(400).json({ error: 'INVALID_HEARTBEAT', message: error.message }); }
+    try { const device = await deviceStore.heartbeat(req.params.deviceToken, req.body || {}); return device ? res.json({ device }) : res.status(404).json({ error: 'DEVICE_NOT_FOUND' }); }
+    catch (error) { return res.status(400).json({ error: 'INVALID_HEARTBEAT', message: error.message }); }
   });
 
   app.get('/api/platform/fleet/health', requireAuth(authService), async (_req, res) => res.json(await deviceStore.fleetHealth()));
@@ -99,14 +111,10 @@ async function start() {
     let xibo = { ok: false, error: 'unavailable' };
     try { await xiboClient.authenticate(); xibo = { ok: true }; } catch (error) { xibo = { ok: false, error: String(error.message || 'xibo unavailable').slice(0, 200) }; }
     const stats = fs.statfsSync(dataDir);
-    return res.json({ status: 'ok', checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, node: process.version, uptimeSeconds: Math.round(process.uptime()), hostname: os.hostname(), memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed, freeSystem: os.freemem(), totalSystem: os.totalmem() }, storage: { freeBytes: Number(stats.bavail) * Number(stats.bsize), totalBytes: Number(stats.blocks) * Number(stats.bsize) }, xibo, ai: aiService ? aiService.diagnostics() : { configured: false }, fleet: await deviceStore.fleetHealth(), analytics: analyticsStore.summary({ sinceHours: 24 }) });
+    return res.json({ status: 'ok', checkedAt: new Date().toISOString(), latencyMs: Date.now() - started, node: process.version, uptimeSeconds: Math.round(process.uptime()), hostname: os.hostname(), memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed, freeSystem: os.freemem(), totalSystem: os.totalmem() }, storage: { freeBytes: Number(stats.bavail) * Number(stats.bsize), totalBytes: Number(stats.blocks) * Number(stats.bsize) }, xibo, ai: aiService ? aiService.diagnostics() : { configured: false }, notifications: notificationService.status(), fleet: await deviceStore.fleetHealth(), analytics: analyticsStore.summary({ sinceHours: 24 }) });
   });
 
-  app.get('/q/:slug', (req, res) => {
-    const qr = platformStore.resolveDynamicQr(req.params.slug);
-    if (!qr) return res.status(404).send('QR not found');
-    return res.redirect(302, qr.destination);
-  });
+  app.get('/q/:slug', (req, res) => { const qr = platformStore.resolveDynamicQr(req.params.slug); if (!qr) return res.status(404).send('QR not found'); return res.redirect(302, qr.destination); });
   app.get('/api/forms/:id', (req, res) => { const form = platformStore.getForm(req.params.id); return form ? res.json({ form }) : res.status(404).json({ error: 'FORM_NOT_FOUND' }); });
   app.post('/api/forms/:id/responses', express.json({ limit: '256kb' }), (req, res) => {
     try { return res.status(201).json({ response: platformStore.submitForm(req.params.id, req.body || {}) }); }
@@ -114,8 +122,8 @@ async function start() {
   });
   app.use(baseApp);
 
-  const server = app.listen(port, () => console.log(`Open Signage API listening on http://localhost:${port}`));
-  const shutdown = () => server.close(() => { analyticsStore.close(); mediaCatalog.close(); platformStore.close(); process.exit(0); });
+  const server = app.listen(port, () => { console.log(`Open Signage API listening on http://localhost:${port}`); healthMonitor.start(); });
+  const shutdown = () => server.close(() => { healthMonitor.stop(); analyticsStore.close(); mediaCatalog.close(); organizationStore.close(); platformStore.close(); process.exit(0); });
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 }
