@@ -12,8 +12,12 @@ async function mockXibo(page: Page) {
   await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok', service: 'open-signage-api' } }));
   await page.route('**/api/integrations/xibo/status', route => route.fulfill({ json: { connected: true } }));
   await page.route('**/api/xibo/displays', route => route.fulfill({ json: { displays: [{ displayId: 12, display: 'Lobby Principal', loggedIn: 1 }] } }));
-  await page.route('**/api/xibo/layouts', route => route.fulfill({ json: { layouts: [{ layoutId: 21, layout: 'Promo Agosto', duration: 10 }] } }));
+  await page.route('**/api/xibo/layouts', async route => {
+    if (route.request().method() === 'POST') return route.fulfill({ status: 201, json: { layout: { layoutId: 22, layout: 'Nuevo Layout' } } });
+    return route.fulfill({ json: { layouts: [{ layoutId: 21, layout: 'Promo Agosto', duration: 10 }] } });
+  });
   await page.route('**/api/xibo/library', route => route.fulfill({ json: { media: [{ mediaId: 31, name: 'hero.jpg', mediaType: 'image', fileSize: 1024 }] } }));
+  await page.route('**/api/xibo/library/upload', route => route.fulfill({ status: 201, json: { media: [{ mediaId: 32, name: 'nuevo.png', mediaType: 'image' }] } }));
   await page.route('**/api/xibo/playlists', route => route.fulfill({ json: { playlists: [{ playlistId: 41, name: 'Lobby', duration: 20 }] } }));
   await page.route('**/api/xibo/display-groups', route => route.fulfill({ json: { displayGroups: [{ displayGroupId: 51, displayGroup: 'Recepción' }] } }));
   await page.route('**/api/xibo/schedules', async route => {
@@ -48,6 +52,39 @@ test.describe('Open Signage Plus V2', () => {
     await main.getByLabel('Grupo de pantallas').selectOption('51');
     await main.getByRole('button', { name: 'Crear programación' }).click();
     await expect(main.getByText(/Programación creada en Xibo/)).toBeVisible();
+  });
+
+  test('Studio creates a browser player scene URL', async ({ page }) => {
+    await mockXibo(page);
+    await page.route('**/api/player/scenes', route => route.fulfill({
+      status: 201,
+      json: { token: 'demo-player-token', scene: { name: 'Lobby Web', items: [] } },
+    }));
+
+    await login(page);
+    await page.getByRole('button', { name: 'Studio' }).click();
+    const main = page.getByRole('main');
+    await main.getByLabel('Nombre de escena').fill('Lobby Web');
+    await main.getByLabel('Texto principal').fill('Bienvenido a Open Signage');
+    await main.getByRole('button', { name: 'Publicar Web Player' }).click();
+    await expect(main.getByText(/demo-player-token/)).toBeVisible();
+  });
+
+  test('browser player renders a scene without login', async ({ page }) => {
+    await page.route('**/api/player/scenes/demo-player-token', route => route.fulfill({
+      json: {
+        scene: {
+          token: 'demo-player-token',
+          name: 'Lobby Web',
+          background: '#050b18',
+          duration: 15,
+          items: [{ type: 'text', text: 'Bienvenido a Open Signage', x: 0, y: 0, width: 100, height: 100, color: '#ffffff', fontSize: 48, align: 'center' }],
+        },
+      },
+    }));
+
+    await page.goto('/player/demo-player-token');
+    await expect(page.getByText('Bienvenido a Open Signage')).toBeVisible();
   });
 
   test('user can log out', async ({ page }) => {
